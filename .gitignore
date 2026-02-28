@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════
+# OASIS .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+*.tsbuildinfo
+
+# Environment secrets
+.env
+.env.local
+.env.production.local
+
+# Runtime-generated GLBs (user conjurations — can be 1GB+)
+public/conjured/*
+# Showcase assets — whitelisted for the repo
+!public/conjured/conj_mlvfxxqw9lsh.glb
+!public/conjured/conj_mlvfxxqw9lsh_thumb.jpg
+!public/conjured/conj_mm3uhazzrh34.glb
+!public/conjured/conj_mm3uhazzrh34_thumb.jpg
+!public/conjured/conj_mlzd9ce4787a.glb
+!public/conjured/conj_mlzd9ce4787a_thumb.jpg
+!public/conjured/conj_mlz2xswt1fav.glb
+!public/conjured/conj_mlz2xswt1fav_thumb.jpg
+!public/conjured/conj_mlqs697n1vy0.glb
+!public/conjured/conj_mlqs697n1vy0_thumb.jpg
+!public/conjured/conj_mm6qylwy5enh.glb
+!public/conjured/conj_mm6qylwy5enh_thumb.jpg
+!public/conjured/conj_mm6nig1zk5eo.glb
+!public/conjured/conj_mm6nig1zk5eo_thumb.jpg
+
+# Runtime-generated thumbnails
+public/crafted-thumbs/*
+!public/crafted-thumbs/.gitkeep
+public/thumbs/
+
+# Bulk source archives (blend/gltf zips — only extracted textures needed)
+*.blend.zip
+*.gltf.zip
+
+# Runtime data (user worlds)
+data/worlds/*.json
+!data/worlds/forge-default.json
+
+# Backup / working copies of data files
+data/*-full.json
+data/*-showcase.json
+
+# PM2 / logs
+logs/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Dev specs (carbondir)
+carbondir/
+
+# Dev session artifacts
+CLAUDE*.md
+feb*.txt
+public/screenshots/
