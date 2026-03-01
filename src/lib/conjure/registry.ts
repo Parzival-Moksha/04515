@@ -43,13 +43,21 @@ function loadFromDisk(): ConjuredAsset[] {
   const parsed = JSON.parse(raw)
   // Guard: if the JSON was saved as an object (keyed by index) instead of array,
   // convert it back to an array. This happens when another process writes {0: ..., 1: ...}
+  let assets: ConjuredAsset[]
   if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
-    const arr = Object.values(parsed) as ConjuredAsset[]
-    // Fix the file on disk so this doesn't happen again
-    saveToDisk(arr)
-    return arr
+    assets = Object.values(parsed) as ConjuredAsset[]
+  } else {
+    assets = parsed
   }
-  return parsed
+  // Strip orphan-rescue ghosts: entries created by rescueOrphanGlbs with garbage metadata.
+  // These have displayName "Recovered asset" or prompt matching their own ID (conj_xxx).
+  const before = assets.length
+  assets = assets.filter(a => a.displayName !== 'Recovered asset' && !(a.prompt && /^conj_[a-z0-9]+$/.test(a.prompt)))
+  if (assets.length < before) {
+    console.log(`[Registry] Stripped ${before - assets.length} recovered-asset ghosts on load`)
+    saveToDisk(assets)
+  }
+  return assets
 }
 
 function saveToDisk(assets: ConjuredAsset[]) {

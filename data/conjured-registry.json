@@ -7,112 +7,71 @@
     "providerTaskId": "885c595e-ffe5-48fb-a18b-c653f84dc48d",
     "status": "ready",
     "progress": 100,
-    "position": [
-      3.0881090035278103,
-      0.5,
-      -3.7474004397045624
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-20T22:07:48.248Z",
-    "thumbnailUrl": "https://tripo-data.rg1.data.tripo3d.com/tcli_7d1517692e7b4c2d94f30ff927f19bdb/20260220/885c595e-ffe5-48fb-a18b-c653f84dc48d/legacy_mesh.webp?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfN2QxNTE3NjkyZTdiNGMyZDk0ZjMwZmY5MjdmMTliZGIvMjAyNjAyMjAvODg1YzU5NWUtZmZlNS00OGZiLWExOGItYzY1M2Y4NGRjNDhkL2xlZ2FjeV9tZXNoLndlYnAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NzE2MzIwMDB9fX1dfQ__&Signature=bIYyniJJ4pOQ0Q21TfCeMkp51heQM9HxmcwTcJ-Q5Pg5azrEc7vu7NoR~YmUYoSVwCu47cTWHBxSbwZ0qnXjhqI7lJ7JLZtbfW7ABym85JW6T4LQya6rjhGKV3rOrlF7K-8Ovk8mpXbRUwes5AId9~OIMxb3mjSH5usdetBF2TVRV0JbqeziNrZJrsjO6c6clmcqLJJe-uNM1vXA4PqzaX2bH6lsA3aRM9UR9ErQxu6YoXeRrsZsik07Plpcfumbc6QAWycG8FcoHGfRPiWYxmqcyYXqeFXmsnSBsmSJ98MzRol2ZZoP7uoSOZcsXsM5sXxzGSunuoAAGwUD8ZbPlA__&Key-Pair-Id=K1676C64NMVM2J",
+    "thumbnailUrl": "/conjured/conj_mlvfxxqw9lsh_thumb.jpg",
     "glbPath": "/conjured/conj_mlvfxxqw9lsh.glb",
     "completedAt": "2026-02-20T22:08:52.767Z",
-    "metadata": {
-      "generationTimeMs": 64518,
-      "fileSizeBytes": 11483136
-    }
+    "metadata": { "generationTimeMs": 64518, "fileSizeBytes": 11483136 },
+    "displayName": "Moana Boat"
   },
   {
     "id": "conj_mlqs697n1vy0",
-    "prompt": "[Recovered] Unknown prompt",
+    "prompt": "lila heart",
     "provider": "meshy",
-    "tier": "unknown",
+    "tier": "refine",
     "providerTaskId": "",
     "status": "ready",
     "progress": 100,
     "glbPath": "/conjured/conj_mlqs697n1vy0.glb",
-    "position": [
-      3.867974512184822,
-      0.5,
-      1.9514124213131634
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-20T11:46:19.716Z",
     "completedAt": "2026-02-17T15:54:43.000Z",
-    "metadata": {
-      "fileSizeBytes": 9026876
-    },
-    "displayName": "lila heart",
+    "metadata": { "fileSizeBytes": 9026876 },
+    "displayName": "Lila Heart",
     "thumbnailUrl": "/conjured/conj_mlqs697n1vy0_thumb.jpg"
   },
   {
     "id": "conj_mlz2xswt1fav",
-    "prompt": "[Recovered] Unknown prompt",
+    "prompt": "merlin wizard character",
     "provider": "meshy",
-    "tier": "unknown",
+    "tier": "refine",
     "providerTaskId": "",
     "status": "ready",
     "progress": 100,
     "glbPath": "/conjured/conj_mlz2xswt1fav.glb",
-    "position": [
-      2.9957351759647644,
-      0.5,
-      2.5796978352917366
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-23T11:19:07.050Z",
     "completedAt": "2026-02-23T11:19:07.059Z",
-    "metadata": {
-      "fileSizeBytes": 23791544
-    },
+    "metadata": { "fileSizeBytes": 23791544 },
     "thumbnailUrl": "/conjured/conj_mlz2xswt1fav_thumb.jpg",
-    "displayName": "merlin1"
+    "displayName": "Merlin"
   },
   {
     "id": "conj_mlzd9ce4787a",
-    "prompt": "[Texturing] a beautiful warrior amazon fairy",
+    "prompt": "a beautiful warrior amazon fairy",
     "provider": "meshy",
     "tier": "refine",
     "providerTaskId": "019c8b3e-0ca9-7416-8772-ade936fb791e",
     "status": "ready",
     "progress": 100,
-    "position": [
-      -0.0444995522343703,
-      0.5,
-      2.244423440945228
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-23T16:03:46.300Z",
     "sourceAssetId": "conj_mlzd57wj44r7",
     "action": "texture",
-    "thumbnailUrl": "https://assets.meshy.ai/7487ca54-778a-4a15-9ca4-f645a0c165ee/tasks/019c8b3e-0ca9-7416-8772-ade936fb791e/output/preview.png?Expires=4925404800&Signature=D8koZFJ7cNhdh1M53rzWk-7Ni2KwxxoyuWJNnWPGMHIGE-ISpktHtaojgq8GFuHt1vdecue5g022mhQVeh2zeNJIfeaAv2zdMnWnlXMytbToLbt9RwItlQoRd1EwOeqvfw4aoMKle11-Fn2ua2-DDaXTtB2Qb-03ayw7fAqZsvWmlcY8tsHZhJianvv8W1j5U~-Bdt3SCKWQtMSgRm0y8McSQVV~LyjyldkyUzwCE1zZU5Kc8AxNmWIcp3crMyTb9rqZCbpHuo8W3hFxV56MaYS-5uNpgIIpulYH2i-vCoHbNonkp8VrQqsDLIZRhaa0BZAvFkjIDGsSFosljo8MSA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "thumbnailUrl": "/conjured/conj_mlzd9ce4787a_thumb.jpg",
     "glbPath": "/conjured/conj_mlzd9ce4787a.glb",
     "completedAt": "2026-02-23T16:12:48.843Z",
-    "metadata": {
-      "generationTimeMs": 542540,
-      "fileSizeBytes": 33805028
-    },
-    "displayName": "pixie amazon"
+    "metadata": { "generationTimeMs": 542540, "fileSizeBytes": 33805028 },
+    "displayName": "Pixie Amazon"
   },
   {
     "id": "conj_mm3uhazzrh34",
@@ -122,1649 +81,125 @@
     "providerTaskId": "019c9b63-5a00-732f-8fa3-34e7792bf8f8",
     "status": "ready",
     "progress": 100,
-    "position": [
-      0,
-      0,
-      0
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-26T19:16:55.919Z",
     "thumbnailUrl": "/conjured/conj_mm3uhazzrh34_thumb.jpg",
     "glbPath": "/conjured/conj_mm3uhazzrh34.glb",
     "completedAt": "2026-02-26T19:35:50.938Z",
-    "metadata": {
-      "generationTimeMs": 43014,
-      "fileSizeBytes": 40642752
-    }
+    "metadata": { "generationTimeMs": 43014, "fileSizeBytes": 40642752 },
+    "displayName": "Maitreya Shrine"
   },
   {
     "id": "conj_mm6nig1zk5eo",
-    "prompt": "[Walking] image to 3D",
+    "prompt": "image to 3D animated character",
     "provider": "meshy",
     "tier": "animate",
     "providerTaskId": "",
     "status": "ready",
     "progress": 100,
-    "position": [
-      0,
-      0,
-      0
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-28T18:25:10.343Z",
     "sourceAssetId": "conj_mm6nh2esah11",
     "action": "animate",
     "characterMode": true,
     "glbPath": "/conjured/conj_mm6nig1zk5eo.glb",
     "completedAt": "2026-02-28T18:25:16.782Z",
-    "metadata": {
-      "fileSizeBytes": 13083748
-    },
-    "displayName": "Walking Vibedev"
+    "metadata": { "fileSizeBytes": 13083748 },
+    "displayName": "Walking Vibedev",
+    "thumbnailUrl": "/conjured/conj_mm6nig1zk5eo_thumb.jpg"
   },
   {
     "id": "conj_mm6qylwy5enh",
-    "prompt": "the characters \"04514\" in hippie colors",
+    "prompt": "the characters 04515 in hippie colors",
     "provider": "tripo",
     "tier": "standard",
     "providerTaskId": "3dfb0687-567f-4721-8883-642d9f081aae",
     "status": "ready",
     "progress": 100,
-    "position": [
-      0,
-      0,
-      0
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
+    "rotation": [0, 0, 0],
     "createdAt": "2026-02-28T20:01:43.282Z",
     "thumbnailUrl": "/conjured/conj_mm6qylwy5enh_thumb.jpg",
     "glbPath": "/conjured/conj_mm6qylwy5enh.glb",
     "completedAt": "2026-02-28T20:02:48.002Z",
-    "metadata": {
-      "generationTimeMs": 64719,
-      "fileSizeBytes": 3776724
-    },
-    "displayName": "04515 sign"
+    "metadata": { "generationTimeMs": 64719, "fileSizeBytes": 3776724 },
+    "displayName": "04515 Sign"
   },
   {
-    "id": "conj_mllkhxygx3x9",
-    "prompt": "conj_mllkhxygx3x9",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
+    "id": "conj_mm7498l9y7nh",
+    "prompt": "image to 3D",
+    "provider": "tripo",
+    "tier": "premium",
+    "providerTaskId": "0f1cd687-2768-4a4d-8942-6ca3270a2f6e",
     "status": "ready",
     "progress": 100,
-    "glbPath": "/conjured/conj_mllkhxygx3x9.glb",
-    "position": [
-      -1.5411850214085865,
-      0.5,
-      -1.9623755239101959
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.473Z",
-    "completedAt": "2026-02-24T19:16:23.002Z",
-    "metadata": {
-      "fileSizeBytes": 841248
-    }
+    "rotation": [0, 0, 0],
+    "createdAt": "2026-03-01T02:13:54.237Z",
+    "thumbnailUrl": "/conjured/conj_mm7498l9y7nh_thumb.jpg",
+    "glbPath": "/conjured/conj_mm7498l9y7nh.glb",
+    "completedAt": "2026-03-01T02:16:55.046Z",
+    "metadata": { "generationTimeMs": 180806, "fileSizeBytes": 41657388 },
+    "displayName": "Oasis Logo (Tripo v1)"
   },
   {
-    "id": "conj_mllnrhd8g3fu",
-    "prompt": "conj_mllnrhd8g3fu",
-    "displayName": "Recovered asset",
+    "id": "conj_mm749nl0erxa",
+    "prompt": "image to 3D",
     "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
+    "tier": "refine",
+    "providerTaskId": "019ca72c-c44c-7670-ab41-5eaaa3be5fd7",
     "status": "ready",
     "progress": 100,
-    "glbPath": "/conjured/conj_mllnrhd8g3fu.glb",
-    "position": [
-      2.9922543178477423,
-      0.5,
-      4.284114152932812
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.497Z",
-    "completedAt": "2026-02-24T19:16:23.016Z",
-    "metadata": {
-      "fileSizeBytes": 3596056
-    }
+    "rotation": [0, 0, 0],
+    "createdAt": "2026-03-01T02:14:13.668Z",
+    "thumbnailUrl": "/conjured/conj_mm749nl0erxa_thumb.jpg",
+    "glbPath": "/conjured/conj_mm749nl0erxa.glb",
+    "completedAt": "2026-03-01T02:16:41.289Z",
+    "metadata": { "generationTimeMs": 147620, "fileSizeBytes": 15163252 },
+    "displayName": "Oasis Logo (Meshy v1)"
   },
   {
-    "id": "conj_mllpzo39ry4d",
-    "prompt": "conj_mllpzo39ry4d",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
+    "id": "conj_mm75f0f23s3h",
+    "prompt": "image to 3D",
+    "provider": "tripo",
+    "tier": "premium",
+    "providerTaskId": "04d04051-a4f2-468d-9787-0345612cfbd0",
     "status": "ready",
     "progress": 100,
-    "glbPath": "/conjured/conj_mllpzo39ry4d.glb",
-    "position": [
-      -1.3594657368073237,
-      0.5,
-      -1.0468318048896341
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.061Z",
-    "completedAt": "2026-02-24T19:16:23.644Z",
-    "metadata": {
-      "fileSizeBytes": 30165780
-    }
+    "rotation": [0, 0, 0],
+    "createdAt": "2026-03-01T02:46:23.198Z",
+    "thumbnailUrl": "/conjured/conj_mm75f0f23s3h_thumb.jpg",
+    "glbPath": "/conjured/conj_mm75f0f23s3h.glb",
+    "completedAt": "2026-03-01T02:48:53.024Z",
+    "metadata": { "generationTimeMs": 149825, "fileSizeBytes": 42673924 },
+    "displayName": "Oasis Logo (Tripo v2)"
   },
   {
-    "id": "conj_mlma3o7u0bwr",
-    "prompt": "conj_mlma3o7u0bwr",
-    "displayName": "Recovered asset",
+    "id": "conj_mm75g1uj21th",
+    "prompt": "image to 3D",
     "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
+    "tier": "refine",
+    "providerTaskId": "019ca74a-fe6b-72dd-8f00-a637f1215003",
     "status": "ready",
     "progress": 100,
-    "glbPath": "/conjured/conj_mlma3o7u0bwr.glb",
-    "position": [
-      -4.5459399203850275,
-      0.5,
-      3.9230007434015257
-    ],
+    "position": [0, 0, 0],
     "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.529Z",
-    "completedAt": "2026-02-24T19:16:23.210Z",
-    "metadata": {
-      "fileSizeBytes": 133666664
-    }
-  },
-  {
-    "id": "conj_mlmc0l2kmz06",
-    "prompt": "conj_mlmc0l2kmz06",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlmc0l2kmz06.glb",
-    "position": [
-      2.6441051636790935,
-      0.5,
-      -2.5390969536514785
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.094Z",
-    "completedAt": "2026-02-24T19:16:23.758Z",
-    "metadata": {
-      "fileSizeBytes": 275607932
-    }
-  },
-  {
-    "id": "conj_mlo1ukbojdxn",
-    "prompt": "conj_mlo1ukbojdxn",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlo1ukbojdxn.glb",
-    "position": [
-      0.3317647669166601,
-      0.5,
-      -0.18099688990246499
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.865Z",
-    "completedAt": "2026-02-24T19:16:23.524Z",
-    "metadata": {
-      "fileSizeBytes": 24837352
-    }
-  },
-  {
-    "id": "conj_mlob7hk3i5e3",
-    "prompt": "conj_mlob7hk3i5e3",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlob7hk3i5e3.glb",
-    "position": [
-      -1.9459238785775668,
-      0.5,
-      2.474228786993631
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.979Z",
-    "completedAt": "2026-02-24T19:16:23.612Z",
-    "metadata": {
-      "fileSizeBytes": 30783384
-    }
-  },
-  {
-    "id": "conj_mlph45hd46mp",
-    "prompt": "conj_mlph45hd46mp",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlph45hd46mp.glb",
-    "position": [
-      4.015535226579119,
-      0.5,
-      4.690657414315675
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.371Z",
-    "completedAt": "2026-02-24T19:16:23.766Z",
-    "metadata": {
-      "fileSizeBytes": 8192648
-    }
-  },
-  {
-    "id": "conj_mluvdev6yhmp",
-    "prompt": "conj_mluvdev6yhmp",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mluvdev6yhmp.glb",
-    "position": [
-      4.854358297835544,
-      0.5,
-      1.2009997430125186
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.889Z",
-    "completedAt": "2026-02-24T19:16:23.596Z",
-    "metadata": {
-      "fileSizeBytes": 100083088
-    }
-  },
-  {
-    "id": "conj_mluyjmx7w8lv",
-    "prompt": "conj_mluyjmx7w8lv",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mluyjmx7w8lv.glb",
-    "position": [
-      -2.9464348107043037,
-      0.5,
-      -3.808527343556143
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.481Z",
-    "completedAt": "2026-02-24T19:16:23.016Z",
-    "metadata": {
-      "fileSizeBytes": 11002344
-    }
-  },
-  {
-    "id": "conj_mlv2qzq67esu",
-    "prompt": "conj_mlv2qzq67esu",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlv2qzq67esu.glb",
-    "position": [
-      1.8232280236942522,
-      0.5,
-      -1.1239757245235205
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.421Z",
-    "completedAt": "2026-02-24T19:16:23.815Z",
-    "metadata": {
-      "fileSizeBytes": 41730384
-    }
-  },
-  {
-    "id": "conj_mlv4fl9mlgnk",
-    "prompt": "conj_mlv4fl9mlgnk",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlv4fl9mlgnk.glb",
-    "position": [
-      3.3281720832514083,
-      0.5,
-      4.812504412712586
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.682Z",
-    "completedAt": "2026-02-24T19:16:23.267Z",
-    "metadata": {
-      "fileSizeBytes": 16377312
-    }
-  },
-  {
-    "id": "conj_mlv575pjvjs4",
-    "prompt": "conj_mlv575pjvjs4",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlv575pjvjs4.glb",
-    "position": [
-      2.558231276874514,
-      0.5,
-      1.4081413962933742
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.698Z",
-    "completedAt": "2026-02-24T19:16:23.492Z",
-    "metadata": {
-      "fileSizeBytes": 215576424
-    }
-  },
-  {
-    "id": "conj_mlv586ugfv74",
-    "prompt": "conj_mlv586ugfv74",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlv586ugfv74.glb",
-    "position": [
-      4.307091884315737,
-      0.5,
-      -2.4815713883717816
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:08.658Z",
-    "completedAt": "2026-02-24T19:16:23.243Z",
-    "metadata": {
-      "fileSizeBytes": 28474896
-    }
-  },
-  {
-    "id": "conj_mlvdu3abtf0c",
-    "prompt": "conj_mlvdu3abtf0c",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlvdu3abtf0c.glb",
-    "position": [
-      -4.378747186327326,
-      0.5,
-      -1.3352977376883701
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.551Z",
-    "completedAt": "2026-02-24T19:16:23.875Z",
-    "metadata": {
-      "fileSizeBytes": 36075144
-    }
-  },
-  {
-    "id": "conj_mlvdurs0mlye",
-    "prompt": "conj_mlvdurs0mlye",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlvdurs0mlye.glb",
-    "position": [
-      -4.523529568591669,
-      0.5,
-      0.503401593329742
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.478Z",
-    "completedAt": "2026-02-24T19:16:23.839Z",
-    "metadata": {
-      "fileSizeBytes": 28381404
-    }
-  },
-  {
-    "id": "conj_mlz0q2wtcmhy",
-    "prompt": "conj_mlz0q2wtcmhy",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlz0q2wtcmhy.glb",
-    "position": [
-      -1.056274305368099,
-      0.5,
-      4.348009858984227
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.502Z",
-    "completedAt": "2026-02-24T19:16:23.857Z",
-    "metadata": {
-      "fileSizeBytes": 32942272
-    }
-  },
-  {
-    "id": "conj_mlz1pk2g58ie",
-    "prompt": "conj_mlz1pk2g58ie",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlz1pk2g58ie.glb",
-    "position": [
-      -4.694808067672993,
-      0.5,
-      -1.433166620246864
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.404Z",
-    "completedAt": "2026-02-24T19:16:23.790Z",
-    "metadata": {
-      "fileSizeBytes": 10590900
-    }
-  },
-  {
-    "id": "conj_mlz3zdh6wdz1",
-    "prompt": "conj_mlz3zdh6wdz1",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlz3zdh6wdz1.glb",
-    "position": [
-      0.7965323747256781,
-      0.5,
-      -4.802484763100181
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.461Z",
-    "completedAt": "2026-02-24T19:16:23.823Z",
-    "metadata": {
-      "fileSizeBytes": 7706456
-    }
-  },
-  {
-    "id": "conj_mlzcmbxv3q2c",
-    "prompt": "conj_mlzcmbxv3q2c",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlzcmbxv3q2c.glb",
-    "position": [
-      2.404954642899846,
-      0.5,
-      -3.7867276018298757
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.003Z",
-    "completedAt": "2026-02-24T19:16:23.620Z",
-    "metadata": {
-      "fileSizeBytes": 21416580
-    }
-  },
-  {
-    "id": "conj_mlzcwablj378",
-    "prompt": "conj_mlzcwablj378",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlzcwablj378.glb",
-    "position": [
-      1.2092974615234287,
-      0.5,
-      2.467572981571604
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.028Z",
-    "completedAt": "2026-02-24T19:16:23.628Z",
-    "metadata": {
-      "fileSizeBytes": 24693276
-    }
-  },
-  {
-    "id": "conj_mlzd57wj44r7",
-    "prompt": "conj_mlzd57wj44r7",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mlzd57wj44r7.glb",
-    "position": [
-      4.174463502202976,
-      0.5,
-      3.2424885358963795
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-24T19:16:09.535Z",
-    "completedAt": "2026-02-24T19:16:23.858Z",
-    "metadata": {
-      "fileSizeBytes": 14359772
-    }
-  },
-  {
-    "id": "conj_mm1k5yq1btms",
-    "prompt": "conj_mm1k5yq1btms",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm1k5yq1btms.glb",
-    "position": [
-      -4.185746698559846,
-      0.5,
-      3.9134158378720207
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-25T04:53:46.382Z",
-    "completedAt": "2026-02-25T04:53:46.387Z",
-    "metadata": {
-      "fileSizeBytes": 14863988
-    }
-  },
-  {
-    "id": "conj_mm2imj66fzef",
-    "prompt": "conj_mm2imj66fzef",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm2imj66fzef.glb",
-    "position": [
-      -2.6615860538046987,
-      0.5,
-      4.917346397738553
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-25T21:06:22.643Z",
-    "completedAt": "2026-02-25T21:06:22.689Z",
-    "metadata": {
-      "fileSizeBytes": 74369180
-    }
-  },
-  {
-    "id": "conj_mm2j8olqlndg",
-    "prompt": "conj_mm2j8olqlndg",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm2j8olqlndg.glb",
-    "position": [
-      -3.888273414723269,
-      0.5,
-      1.135358198212355
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-25T21:16:18.980Z",
-    "completedAt": "2026-02-25T21:16:18.988Z",
-    "metadata": {
-      "fileSizeBytes": 22072004
-    }
-  },
-  {
-    "id": "conj_mm2lw0xwwhk1",
-    "prompt": "conj_mm2lw0xwwhk1",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm2lw0xwwhk1.glb",
-    "position": [
-      2.9121354777061925,
-      0.5,
-      3.687658342354443
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-25T22:31:21.276Z",
-    "completedAt": "2026-02-25T22:31:21.282Z",
-    "metadata": {
-      "fileSizeBytes": 13067480
-    }
-  },
-  {
-    "id": "conj_mm2m3rw4h82o",
-    "prompt": "conj_mm2m3rw4h82o",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm2m3rw4h82o.glb",
-    "position": [
-      -1.2263254963412362,
-      0.5,
-      3.575469727879479
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-25T22:39:16.023Z",
-    "completedAt": "2026-02-25T22:39:16.034Z",
-    "metadata": {
-      "fileSizeBytes": 20577448
-    }
-  },
-  {
-    "id": "conj_mm3rydrqofaj",
-    "prompt": "conj_mm3rydrqofaj",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3rydrqofaj.glb",
-    "position": [
-      3.5252170319578036,
-      0.5,
-      -3.8604150870642084
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T18:08:27.497Z",
-    "completedAt": "2026-02-26T18:08:27.513Z",
-    "metadata": {
-      "fileSizeBytes": 24882000
-    }
-  },
-  {
-    "id": "conj_mm3tzecc0m0v",
-    "prompt": "conj_mm3tzecc0m0v",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3tzecc0m0v.glb",
-    "position": [
-      3.686726211809148,
-      0.5,
-      3.6243619002523264
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T19:05:06.766Z",
-    "completedAt": "2026-02-26T19:05:06.776Z",
-    "metadata": {
-      "fileSizeBytes": 22882800
-    }
-  },
-  {
-    "id": "conj_mm3wk1jedx14",
-    "prompt": "conj_mm3wk1jedx14",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3wk1jedx14.glb",
-    "position": [
-      3.7508414810196666,
-      0.5,
-      3.115785061647234
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T20:16:27.235Z",
-    "completedAt": "2026-02-26T20:16:27.241Z",
-    "metadata": {
-      "fileSizeBytes": 15023716
-    }
-  },
-  {
-    "id": "conj_mm3wl56dj788",
-    "prompt": "conj_mm3wl56dj788",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3wl56dj788.glb",
-    "position": [
-      -0.8203407878705016,
-      0.5,
-      3.7408250337426163
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T20:17:13.372Z",
-    "completedAt": "2026-02-26T20:17:13.375Z",
-    "metadata": {
-      "fileSizeBytes": 15372840
-    }
-  },
-  {
-    "id": "conj_mm3wmf4dajob",
-    "prompt": "conj_mm3wmf4dajob",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3wmf4dajob.glb",
-    "position": [
-      2.8876894564125277,
-      0.5,
-      -4.93040788964187
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T20:18:23.136Z",
-    "completedAt": "2026-02-26T20:18:23.152Z",
-    "metadata": {
-      "fileSizeBytes": 28177476
-    }
-  },
-  {
-    "id": "conj_mm3yjxtepfcf",
-    "prompt": "conj_mm3yjxtepfcf",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3yjxtepfcf.glb",
-    "position": [
-      4.5593383750501975,
-      0.5,
-      -0.23015432329289487
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T21:15:11.361Z",
-    "completedAt": "2026-02-26T21:15:11.372Z",
-    "metadata": {
-      "fileSizeBytes": 20856828
-    }
-  },
-  {
-    "id": "conj_mm3ypdvzsp0l",
-    "prompt": "conj_mm3ypdvzsp0l",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm3ypdvzsp0l.glb",
-    "position": [
-      1.308889608518089,
-      0.5,
-      4.229809305730809
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-26T21:19:03.365Z",
-    "completedAt": "2026-02-26T21:19:03.378Z",
-    "metadata": {
-      "fileSizeBytes": 23954924
-    }
-  },
-  {
-    "id": "conj_mm56d5wxpt5v",
-    "prompt": "conj_mm56d5wxpt5v",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm56d5wxpt5v.glb",
-    "position": [
-      -4.728452809027852,
-      0.5,
-      -3.8778734672379556
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T17:40:47.591Z",
-    "completedAt": "2026-02-27T17:40:47.597Z",
-    "metadata": {
-      "fileSizeBytes": 12309620
-    }
-  },
-  {
-    "id": "conj_mm56hiswyfx2",
-    "prompt": "conj_mm56hiswyfx2",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm56hiswyfx2.glb",
-    "position": [
-      -1.3288721083974897,
-      0.5,
-      3.8914890720763085
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T17:41:58.634Z",
-    "completedAt": "2026-02-27T17:41:58.641Z",
-    "metadata": {
-      "fileSizeBytes": 19493548
-    }
-  },
-  {
-    "id": "conj_mm56nuxmip10",
-    "prompt": "conj_mm56nuxmip10",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm56nuxmip10.glb",
-    "position": [
-      3.0637627096923925,
-      0.5,
-      3.350841962854545
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T17:46:14.100Z",
-    "completedAt": "2026-02-27T17:46:14.101Z",
-    "metadata": {
-      "fileSizeBytes": 1053620
-    }
-  },
-  {
-    "id": "conj_mm56oiqfs88c",
-    "prompt": "conj_mm56oiqfs88c",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm56oiqfs88c.glb",
-    "position": [
-      2.8689275069245435,
-      0.5,
-      -1.8426593560046012
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T17:46:42.801Z",
-    "completedAt": "2026-02-27T17:46:42.803Z",
-    "metadata": {
-      "fileSizeBytes": 1179704
-    }
-  },
-  {
-    "id": "conj_mm58053z6ln0",
-    "prompt": "conj_mm58053z6ln0",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm58053z6ln0.glb",
-    "position": [
-      2.296856806767502,
-      0.5,
-      1.0417538169000617
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T18:25:48.913Z",
-    "completedAt": "2026-02-27T18:25:48.917Z",
-    "metadata": {
-      "fileSizeBytes": 10901864
-    }
-  },
-  {
-    "id": "conj_mm599o6ng3x4",
-    "prompt": "conj_mm599o6ng3x4",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm599o6ng3x4.glb",
-    "position": [
-      2.3694999367446834,
-      0.5,
-      2.556208257805339
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T19:03:03.742Z",
-    "completedAt": "2026-02-27T19:03:03.749Z",
-    "metadata": {
-      "fileSizeBytes": 21953624
-    }
-  },
-  {
-    "id": "conj_mm59alk3uw0j",
-    "prompt": "conj_mm59alk3uw0j",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm59alk3uw0j.glb",
-    "position": [
-      0.14996766139019346,
-      0.5,
-      0.045761780589312906
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T19:02:19.301Z",
-    "completedAt": "2026-02-27T19:02:19.318Z",
-    "metadata": {
-      "fileSizeBytes": 26759104
-    }
-  },
-  {
-    "id": "conj_mm59fbk7e0uj",
-    "prompt": "conj_mm59fbk7e0uj",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm59fbk7e0uj.glb",
-    "position": [
-      3.523136194781711,
-      0.5,
-      0.05347472740142356
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T19:05:38.911Z",
-    "completedAt": "2026-02-27T19:05:38.920Z",
-    "metadata": {
-      "fileSizeBytes": 24867672
-    }
-  },
-  {
-    "id": "conj_mm59inaij638",
-    "prompt": "conj_mm59inaij638",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm59inaij638.glb",
-    "position": [
-      1.2958919734892316,
-      0.5,
-      -3.9458796635351145
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-27T19:05:55.762Z",
-    "completedAt": "2026-02-27T19:05:55.777Z",
-    "metadata": {
-      "fileSizeBytes": 24880424
-    }
-  },
-  {
-    "id": "conj_mm6ddjwrxwtf",
-    "prompt": "conj_mm6ddjwrxwtf",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6ddjwrxwtf.glb",
-    "position": [
-      2.6532810564889497,
-      0.5,
-      0.47947208089528903
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T13:43:47.381Z",
-    "completedAt": "2026-02-28T13:43:47.383Z",
-    "metadata": {
-      "fileSizeBytes": 11247808
-    }
-  },
-  {
-    "id": "conj_mm6dgl2y5qaa",
-    "prompt": "conj_mm6dgl2y5qaa",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6dgl2y5qaa.glb",
-    "position": [
-      -2.443200280561677,
-      0.5,
-      -0.9152738487371836
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T13:45:26.577Z",
-    "completedAt": "2026-02-28T13:45:26.585Z",
-    "metadata": {
-      "fileSizeBytes": 17744088
-    }
-  },
-  {
-    "id": "conj_mm6dipmkih47",
-    "prompt": "conj_mm6dipmkih47",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6dipmkih47.glb",
-    "position": [
-      2.644765276076584,
-      0.5,
-      1.9560731631296613
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T13:45:39.983Z",
-    "completedAt": "2026-02-28T13:45:39.992Z",
-    "metadata": {
-      "fileSizeBytes": 17756824
-    }
-  },
-  {
-    "id": "conj_mm6leetmpqh3",
-    "prompt": "conj_mm6leetmpqh3",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6leetmpqh3.glb",
-    "position": [
-      -1.5360925670619507,
-      0.5,
-      -0.6181650116380344
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T17:28:35.887Z",
-    "completedAt": "2026-02-28T17:28:35.910Z",
-    "metadata": {
-      "fileSizeBytes": 40962768
-    }
-  },
-  {
-    "id": "conj_mm6lhow8hoeb",
-    "prompt": "conj_mm6lhow8hoeb",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6lhow8hoeb.glb",
-    "position": [
-      3.3708035889715937,
-      0.5,
-      1.8892694554956702
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T17:31:23.173Z",
-    "completedAt": "2026-02-28T17:31:23.210Z",
-    "metadata": {
-      "fileSizeBytes": 55559088
-    }
-  },
-  {
-    "id": "conj_mm6lxyhh69iq",
-    "prompt": "conj_mm6lxyhh69iq",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6lxyhh69iq.glb",
-    "position": [
-      -4.761802702880815,
-      0.5,
-      0.27582549161633496
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T17:43:31.069Z",
-    "completedAt": "2026-02-28T17:43:31.072Z",
-    "metadata": {
-      "fileSizeBytes": 9344240
-    }
-  },
-  {
-    "id": "conj_mm6m0vlu3bqx",
-    "prompt": "conj_mm6m0vlu3bqx",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6m0vlu3bqx.glb",
-    "position": [
-      -3.393826894300862,
-      0.5,
-      2.4179292655004803
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T17:44:40.832Z",
-    "completedAt": "2026-02-28T17:44:40.838Z",
-    "metadata": {
-      "fileSizeBytes": 15276044
-    }
-  },
-  {
-    "id": "conj_mm6m2dftmf7i",
-    "prompt": "conj_mm6m2dftmf7i",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6m2dftmf7i.glb",
-    "position": [
-      -0.37854446695839705,
-      0.5,
-      -0.709330260319847
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T17:44:52.815Z",
-    "completedAt": "2026-02-28T17:44:52.821Z",
-    "metadata": {
-      "fileSizeBytes": 15288796
-    }
-  },
-  {
-    "id": "conj_mm6ms63e3uia",
-    "prompt": "conj_mm6ms63e3uia",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6ms63e3uia.glb",
-    "position": [
-      4.713709220299094,
-      0.5,
-      -4.669012292179873
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T18:07:20.008Z",
-    "completedAt": "2026-02-28T18:07:20.033Z",
-    "metadata": {
-      "fileSizeBytes": 41406296
-    }
-  },
-  {
-    "id": "conj_mm6mvi779rtd",
-    "prompt": "conj_mm6mvi779rtd",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6mvi779rtd.glb",
-    "position": [
-      -3.9196253778432855,
-      0.5,
-      0.10166951126351798
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T18:13:28.385Z",
-    "completedAt": "2026-02-28T18:13:28.488Z",
-    "metadata": {
-      "fileSizeBytes": 56136664
-    }
-  },
-  {
-    "id": "conj_mm6ndffzh4d9",
-    "prompt": "conj_mm6ndffzh4d9",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6ndffzh4d9.glb",
-    "position": [
-      -1.216018228207807,
-      0.5,
-      0.004461269594682182
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T18:24:05.999Z",
-    "completedAt": "2026-02-28T18:24:06.002Z",
-    "metadata": {
-      "fileSizeBytes": 7700352
-    }
-  },
-  {
-    "id": "conj_mm6nh2esah11",
-    "prompt": "conj_mm6nh2esah11",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6nh2esah11.glb",
-    "position": [
-      -4.478862371385286,
-      0.5,
-      0.8752740692963479
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T18:25:10.336Z",
-    "completedAt": "2026-02-28T18:25:10.340Z",
-    "metadata": {
-      "fileSizeBytes": 13070996
-    }
-  },
-  {
-    "id": "conj_mm6nil0wfyi0",
-    "prompt": "conj_mm6nil0wfyi0",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6nil0wfyi0.glb",
-    "position": [
-      4.3287330397268935,
-      0.5,
-      -0.19019244425573456
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T18:25:22.001Z",
-    "completedAt": "2026-02-28T18:25:22.006Z",
-    "metadata": {
-      "fileSizeBytes": 13079140
-    }
-  },
-  {
-    "id": "conj_mm6qy2otpk18",
-    "prompt": "conj_mm6qy2otpk18",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6qy2otpk18.glb",
-    "position": [
-      -3.580921061127398,
-      0.5,
-      -3.817013198324708
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T20:02:43.408Z",
-    "completedAt": "2026-02-28T20:02:43.412Z",
-    "metadata": {
-      "fileSizeBytes": 8708480
-    }
-  },
-  {
-    "id": "conj_mm6r7mywyhgn",
-    "prompt": "conj_mm6r7mywyhgn",
-    "displayName": "Recovered asset",
-    "provider": "meshy",
-    "tier": "unknown",
-    "providerTaskId": "",
-    "status": "ready",
-    "progress": 100,
-    "glbPath": "/conjured/conj_mm6r7mywyhgn.glb",
-    "position": [
-      3.822214434724127,
-      0.5,
-      -2.8420072691768183
-    ],
-    "scale": 1,
-    "rotation": [
-      0,
-      0,
-      0
-    ],
-    "createdAt": "2026-02-28T20:09:51.024Z",
-    "completedAt": "2026-02-28T20:09:51.028Z",
-    "metadata": {
-      "fileSizeBytes": 5122444
-    }
+    "rotation": [0, 0, 0],
+    "createdAt": "2026-03-01T02:47:11.707Z",
+    "thumbnailUrl": "/conjured/conj_mm75g1uj21th_thumb.jpg",
+    "glbPath": "/conjured/conj_mm75g1uj21th.glb",
+    "completedAt": "2026-03-01T02:50:58.886Z",
+    "metadata": { "generationTimeMs": 227178, "fileSizeBytes": 18952296 },
+    "displayName": "Oasis Logo (Meshy v2)"
   }
 ]

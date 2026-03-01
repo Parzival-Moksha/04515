@@ -235,9 +235,15 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
           <div className="text-2xl text-red-500">&#10006;</div>
         )}
 
-        {/* Delete button (top-right, on hover) */}
+        {/* Delete button (top-right, on hover) — with confirmation */}
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(asset.id) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            const name = asset.displayName || asset.prompt?.slice(0, 30) || asset.id
+            if (window.confirm(`Delete "${name}"? This removes the GLB file permanently.`)) {
+              onDelete(asset.id)
+            }
+          }}
           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-gray-400 hover:text-red-400 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
         >
           &#10005;

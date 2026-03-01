@@ -32,6 +32,15 @@ public/conjured/*
 !public/conjured/conj_mm6qylwy5enh_thumb.jpg
 !public/conjured/conj_mm6nig1zk5eo.glb
 !public/conjured/conj_mm6nig1zk5eo_thumb.jpg
+# Oasis logo assets (image-to-3D)
+!public/conjured/conj_mm7498l9y7nh.glb
+!public/conjured/conj_mm7498l9y7nh_thumb.jpg
+!public/conjured/conj_mm749nl0erxa.glb
+!public/conjured/conj_mm749nl0erxa_thumb.jpg
+!public/conjured/conj_mm75f0f23s3h.glb
+!public/conjured/conj_mm75f0f23s3h_thumb.jpg
+!public/conjured/conj_mm75g1uj21th.glb
+!public/conjured/conj_mm75g1uj21th_thumb.jpg
 
 # Runtime-generated thumbnails
 public/crafted-thumbs/*
