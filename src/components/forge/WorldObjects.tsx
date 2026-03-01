@@ -947,17 +947,12 @@ function LightHelperOrb({ light }: { light: import('../../lib/conjure/types').Wo
       )}
       {light.type === 'spot' && (() => {
         const tgt = light.target || [0, -1, 0]
-        // Project direction vector from light position to get world-space target
-        const targetPos: [number, number, number] = [
-          light.position[0] + tgt[0] * 10,
-          light.position[1] + tgt[1] * 10,
-          light.position[2] + tgt[2] * 10,
-        ]
+        // Target in LOCAL space (group already positioned at light.position)
         return (
           <spotLight
             ref={(spot: THREE.SpotLight | null) => {
               if (spot) {
-                spot.target.position.set(targetPos[0], targetPos[1], targetPos[2])
+                spot.target.position.set(tgt[0] * 10, tgt[1] * 10, tgt[2] * 10)
                 if (!spot.target.parent) spot.parent?.add(spot.target)
               }
             }}

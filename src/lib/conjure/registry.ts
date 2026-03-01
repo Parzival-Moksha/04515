@@ -182,6 +182,10 @@ export function invalidateCache(): void {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function rescueOrphanGlbs(): { rescued: number; orphanIds: string[] } {
+  // Disabled: orphan rescue creates "Recovered asset" entries with garbage metadata
+  // that confuse users and can crash the UI. Re-enable when proper recovery UX exists.
+  return { rescued: 0, orphanIds: [] }
+
   const conjuredDir = join(process.cwd(), 'public', 'conjured')
   if (!existsSync(conjuredDir)) return { rescued: 0, orphanIds: [] }
 

@@ -7,9 +7,9 @@
 
 import { Canvas, useFrame, ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, PointerLockControls, KeyboardControls, useKeyboardControls, Stars, Grid, Html, Line, TransformControls, Environment, useProgress } from '@react-three/drei'
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
+import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
-import { Suspense, useState, useRef, useContext, useEffect, useCallback } from 'react'
+import { Suspense, useState, useRef, useContext, useEffect, useCallback, useTransition } from 'react'
 import * as THREE from 'three'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -291,7 +291,7 @@ function SettingsContent() {
 // SKY BACKGROUND — procedural stars or HDRI panorama
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SkyBackground({ backgroundId }: { backgroundId: string }) {
+function SkyBackgroundInner({ backgroundId }: { backgroundId: string }) {
   const skyConfig = SKY_BACKGROUNDS.find(s => s.id === backgroundId) || SKY_BACKGROUNDS[0]
 
   // drei built-in preset (CDN-hosted HDR) — sets both background AND environment (IBL)
@@ -320,6 +320,16 @@ function SkyBackground({ backgroundId }: { backgroundId: string }) {
       backgroundIntensity={1}
     />
   )
+}
+
+// Wrapper: keeps old sky visible until new one loads (no black flash)
+function SkyBackground({ backgroundId }: { backgroundId: string }) {
+  const [activeId, setActiveId] = useState(backgroundId)
+  const [isPending, startTransition] = useTransition()
+  useEffect(() => {
+    startTransition(() => setActiveId(backgroundId))
+  }, [backgroundId])
+  return <SkyBackgroundInner backgroundId={activeId} />
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -449,6 +459,11 @@ function PostProcessing() {
         offset={0.3}
         darkness={settings.vignetteEnabled ? 0.7 : 0}
         blendFunction={BlendFunction.NORMAL}
+      />
+      <ChromaticAberration
+        offset={settings.chromaticEnabled ? [0.003, 0.003] as any : [0, 0] as any}
+        radialModulation
+        modulationOffset={0.5}
       />
     </EffectComposer>
   )
