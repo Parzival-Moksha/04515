@@ -45,6 +45,9 @@ export async function PUT(
     const filename = `${id}_thumb.jpg`
     const destPath = join(dir, filename)
     const buffer = Buffer.from(await file.arrayBuffer())
+    if (buffer.length > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Thumbnail too large (5MB max)' }, { status: 413 })
+    }
     writeFileSync(destPath, buffer)
 
     // ░▒▓ Update registry with local path ▓▒░
@@ -55,8 +58,7 @@ export async function PUT(
 
     return NextResponse.json({ thumbnailUrl })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    console.error('[Forge] PUT thumbnail error:', errorMessage)
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    console.error('[Forge] PUT thumbnail error:', err)
+    return NextResponse.json({ error: 'Failed to save thumbnail' }, { status: 500 })
   }
 }

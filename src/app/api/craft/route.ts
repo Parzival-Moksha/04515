@@ -157,10 +157,13 @@ export async function POST(request: NextRequest) {
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
     }
+    if (prompt.length > 2000) {
+      return NextResponse.json({ error: 'Prompt too long (2000 char max)' }, { status: 400 })
+    }
 
     const apiKey = process.env.OPENROUTER_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: 'OPENROUTER_API_KEY not configured' }, { status: 500 })
+      return NextResponse.json({ error: 'LLM provider not configured' }, { status: 500 })
     }
 
     // Call OpenRouter → Claude for scene generation

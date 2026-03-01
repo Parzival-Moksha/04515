@@ -75,6 +75,7 @@ async function persistThumbnail(assetId: string, externalUrl: string): Promise<s
     const res = await fetch(externalUrl)
     if (!res.ok) return null
     const buffer = Buffer.from(await res.arrayBuffer())
+    if (buffer.length > 10 * 1024 * 1024) return null  // 10MB max for provider thumbnails
     writeFileSync(localPath, buffer)
     console.log(`[Forge] Thumbnail saved: ${assetId} (${(buffer.length / 1024).toFixed(0)} KB)`)
     return `/conjured/${assetId}_thumb.jpg`
@@ -594,7 +595,7 @@ export async function POST(request: Request) {
     const apiKey = process.env[providerDef.envKey]
     if (!apiKey) {
       return NextResponse.json(
-        { error: `API key not configured: ${providerDef.envKey}. Add it to .env` },
+        { error: `API key not configured for ${providerDef.name}. See .env.example` },
         { status: 500 },
       )
     }

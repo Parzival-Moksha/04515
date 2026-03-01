@@ -101,7 +101,7 @@ export async function GET(request: Request) {
   const publicDir = path.join(process.cwd(), 'public', 'models')
 
   if (!fs.existsSync(publicDir)) {
-    return NextResponse.json({ error: 'Models directory not found', path: publicDir }, { status: 404 })
+    return NextResponse.json({ error: 'Models directory not found' }, { status: 404 })
   }
 
   const tree = scanDirectory(publicDir, publicDir)

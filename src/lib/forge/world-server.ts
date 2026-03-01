@@ -38,7 +38,12 @@ function ensureDir(): void {
   }
 }
 
+function isValidWorldId(id: string): boolean {
+  return /^[\w\-]{1,80}$/.test(id)
+}
+
 function worldPath(id: string): string {
+  if (!isValidWorldId(id)) throw new Error('Invalid world ID')
   return join(DATA_DIR, `${id}.json`)
 }
 

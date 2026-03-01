@@ -38,15 +38,21 @@ export async function PUT(request: Request) {
     if (!file || !id) {
       return NextResponse.json({ error: 'Missing thumbnail file or id' }, { status: 400 })
     }
+    if (!/^[\w\-]{1,80}$/.test(id)) {
+      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
+    }
 
     ensureDir()
     const destPath = join(THUMBS_DIR, `${id}.jpg`)
     const buffer = Buffer.from(await file.arrayBuffer())
+    if (buffer.length > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Thumbnail too large (5MB max)' }, { status: 413 })
+    }
     writeFileSync(destPath, buffer)
 
     return NextResponse.json({ thumbnailUrl: `/crafted-thumbs/${id}.jpg` })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[Craft] PUT thumbnail error:', err)
+    return NextResponse.json({ error: 'Failed to save thumbnail' }, { status: 500 })
   }
 }
