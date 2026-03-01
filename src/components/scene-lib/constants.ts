@@ -37,7 +37,6 @@ export const SKY_BACKGROUNDS = [
   { id: 'night004', name: 'Night Sky 004', path: '/hdri/NightSkyHDRI004_4K_TONEMAPPED.jpg' },
   { id: 'night007', name: 'Night Sky 007', path: '/hdri/NightSkyHDRI007_4K_TONEMAPPED.jpg' },
   { id: 'night008', name: 'Night Sky 008', path: '/hdri/NightSkyHDRI008_4K_TONEMAPPED.jpg' },
-  { id: 'rogland', name: 'Rogland Clear Night', path: '/hdri/rogland_clear_night_4k.exr' },
   // ─═̷─═̷─ drei built-in presets (CDN-hosted 1k HDRIs) ─═̷─═̷─
   { id: 'city', name: 'City (Potsdamer Platz)', path: null, preset: 'city' },
   { id: 'dawn', name: 'Dawn', path: null, preset: 'dawn' },
