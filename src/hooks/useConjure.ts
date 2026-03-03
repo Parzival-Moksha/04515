@@ -37,6 +37,9 @@ export function useConjure() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        if (res.status === 402) {
+          throw new Error(`Insufficient credits (${err.credits ?? 0} remaining, need ${err.required ?? 1})`)
+        }
         throw new Error(err.error || `HTTP ${res.status}`)
       }
 
@@ -85,6 +88,9 @@ export function useConjure() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        if (res.status === 402) {
+          throw new Error(`Insufficient credits (${err.credits ?? 0} remaining, need ${err.required ?? 1})`)
+        }
         throw new Error(err.error || `HTTP ${res.status}`)
       }
 

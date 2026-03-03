@@ -29,6 +29,8 @@ import { MeshyClient } from '@/lib/conjure/meshy'
 import { TripoClient } from '@/lib/conjure/tripo'
 import { PROVIDERS } from '@/lib/conjure/types'
 import type { ConjureRequest, ConjuredAsset, ProviderName, ConjureStatus, RigResult } from '@/lib/conjure/types'
+import { auth } from '@/lib/auth'
+import { getServerSupabase } from '@/lib/supabase'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ID GENERATION — every conjured object gets a unique soul-stamp
@@ -610,6 +612,42 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
+
+    // ░▒▓ CREDIT CHECK — the toll at the gate of creation ▓▒░
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Sign in to conjure' }, { status: 401 })
+    }
+
+    const creditCost = tierDef.creditCost
+    const sb = getServerSupabase()
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('credits')
+      .eq('id', session.user.id)
+      .single()
+
+    const currentCredits = profile?.credits ?? 0
+    if (currentCredits < creditCost) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', credits: currentCredits, required: creditCost },
+        { status: 402 },
+      )
+    }
+
+    // Deduct credits — gte guard prevents going negative in race conditions
+    const { error: deductError } = await sb
+      .from('profiles')
+      .update({ credits: currentCredits - creditCost })
+      .eq('id', session.user.id)
+      .gte('credits', creditCost)
+
+    if (deductError) {
+      console.error('[Forge] Credit deduction failed:', deductError.message)
+      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+    }
+
+    console.log(`[Forge] Deducted ${creditCost} credit(s) from ${session.user.id} (${currentCredits} → ${currentCredits - creditCost})`)
 
     // ░▒▓ Create the asset entry in the registry ▓▒░
     const id = generateAssetId()

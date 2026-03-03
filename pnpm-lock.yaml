@@ -35,6 +35,9 @@ importers:
       simplex-noise:
         specifier: ^4.0.3
         version: 4.0.3
+      stripe:
+        specifier: ^20.4.0
+        version: 20.4.0(@types/node@20.19.33)
       three:
         specifier: ^0.162.0
         version: 0.162.0
@@ -854,6 +857,15 @@ packages:
   streamsearch@1.1.0:
     resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}
     engines: {node: '>=10.0.0'}
+
+  stripe@20.4.0:
+    resolution: {integrity: sha512-F/aN1IQ9vHmlyLNi3DkiIbyzQb6gyBG0uYFd/VrEVQSc9BLtlgknPUx0EvzZdBMRLFuRaPFIFd7Mxwtg7Pbwzw==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   styled-jsx@5.1.1:
     resolution: {integrity: sha512-pW7uC1l4mBZ8ugbiZrcIsiIvVx1UmTfw7UkC3Um2tmfUq9Bhk8IiyEIPl6F8agHgjzku6j0xQEZbfA5uSgSaCw==}
@@ -1742,6 +1754,10 @@ snapshots:
   stats.js@0.17.0: {}
 
   streamsearch@1.1.0: {}
+
+  stripe@20.4.0(@types/node@20.19.33):
+    optionalDependencies:
+      '@types/node': 20.19.33
 
   styled-jsx@5.1.1(react@18.3.1):
     dependencies:

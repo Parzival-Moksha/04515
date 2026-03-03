@@ -1227,11 +1227,15 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
       {/* Error display */}
       {error && (
         <div className="px-3 pb-1 flex-shrink-0">
-          <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+          <div className={`text-[10px] rounded px-2 py-1 ${
+            error.includes('Insufficient credits')
+              ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+              : 'text-red-400 bg-red-500/10 border border-red-500/20'
+          }`}>
             {error}
             <button
               onClick={() => setError(null)}
-              className="ml-2 text-red-500 hover:text-red-300"
+              className={`ml-2 ${error.includes('Insufficient credits') ? 'text-amber-500 hover:text-amber-300' : 'text-red-500 hover:text-red-300'}`}
             >
               &#215;
             </button>
@@ -2439,12 +2443,12 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                       })
                     }}
                     onRemove={removeConjuredAssetFromWorld}
-                    onTexture={(id) => processAsset(id, 'texture').catch(() => {})}
+                    onTexture={(id) => processAsset(id, 'texture').catch((e: Error) => setError(e.message))}
                     onRemesh={(id, quality) => {
                       const preset = REMESH_PRESETS[quality]
-                      processAsset(id, 'remesh', { targetPolycount: preset.polycount, topology: 'quad' }).catch(() => {})
+                      processAsset(id, 'remesh', { targetPolycount: preset.polycount, topology: 'quad' }).catch((e: Error) => setError(e.message))
                     }}
-                    onRig={(id) => processAsset(id, 'rig').catch(() => {})}
+                    onRig={(id) => processAsset(id, 'rig').catch((e: Error) => setError(e.message))}
                     onRename={renameAsset}
                   />
                 ))}

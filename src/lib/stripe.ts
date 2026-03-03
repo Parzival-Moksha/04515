@@ -1,13 +1,17 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-// 04515 — Auth Middleware
-// Protects routes — unauthenticated users get bounced to /login
+// 04515 — Stripe Client (server-side only)
+// Singleton instance. Used by checkout + webhook routes.
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-export { auth as middleware } from '@/lib/auth'
+import Stripe from 'stripe'
 
-export const config = {
-  // Protect everything EXCEPT: login page, auth API, static files, favicon, public assets
-  matcher: [
-    '/((?!login|api/auth|api/stripe/webhook|_next/static|_next/image|favicon\\.svg|conjured/|catalog/|sky/).*)',
-  ],
+let _stripe: Stripe | null = null
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) throw new Error('STRIPE_SECRET_KEY is not set')
+    _stripe = new Stripe(key)
+  }
+  return _stripe
 }

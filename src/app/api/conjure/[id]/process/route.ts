@@ -28,7 +28,10 @@ import { existsSync, mkdirSync, statSync } from 'fs'
 import { getAssetById, addAsset, updateAsset } from '@/lib/conjure/registry'
 import { MeshyClient } from '@/lib/conjure/meshy'
 import { TripoClient } from '@/lib/conjure/tripo'
+import { POST_PROCESS_COSTS } from '@/lib/conjure/types'
 import type { ConjuredAsset, ProcessRequest, ConjureStatus, ProviderName } from '@/lib/conjure/types'
+import { auth } from '@/lib/auth'
+import { getServerSupabase } from '@/lib/supabase'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROVIDER-AWARE CLIENT INTERFACE — Both Meshy + Tripo implement these
@@ -360,6 +363,41 @@ export async function POST(
         { status: 400 },
       )
     }
+
+    // ░▒▓ CREDIT CHECK — post-processing also costs credits ▓▒░
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Sign in to process assets' }, { status: 401 })
+    }
+
+    const creditCost = POST_PROCESS_COSTS[body.action] ?? 1
+    const sb = getServerSupabase()
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('credits')
+      .eq('id', session.user.id)
+      .single()
+
+    const currentCredits = profile?.credits ?? 0
+    if (currentCredits < creditCost) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', credits: currentCredits, required: creditCost },
+        { status: 402 },
+      )
+    }
+
+    const { error: deductError } = await sb
+      .from('profiles')
+      .update({ credits: currentCredits - creditCost })
+      .eq('id', session.user.id)
+      .gte('credits', creditCost)
+
+    if (deductError) {
+      console.error('[Forge:Process] Credit deduction failed:', deductError.message)
+      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+    }
+
+    console.log(`[Forge:Process] Deducted ${creditCost} credit(s) for ${body.action} from ${session.user.id}`)
 
     // ░▒▓ Create the child asset ▓▒░
     const newId = generateAssetId()

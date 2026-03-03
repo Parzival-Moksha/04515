@@ -6,6 +6,7 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { getServerSupabase } from './supabase'
+import { FREE_CREDITS } from '@/lib/conjure/types'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -37,14 +38,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       try {
         const sb = getServerSupabase()
-        await sb.from('profiles').upsert({
-          id: profile?.sub || user.id,
-          email: user.email,
-          name: user.name,
-          avatar_url: user.image,
-          provider: account?.provider || 'google',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
+        const userId = profile?.sub || user.id
+        // Check if user already exists — don't overwrite credits on re-login
+        const { data: existing } = await sb.from('profiles').select('id').eq('id', userId).single()
+        if (existing) {
+          // Returning user — update profile info only, preserve credits
+          await sb.from('profiles').update({
+            email: user.email,
+            name: user.name,
+            avatar_url: user.image,
+            provider: account?.provider || 'google',
+            updated_at: new Date().toISOString(),
+          }).eq('id', userId)
+        } else {
+          // New user — grant free credits
+          await sb.from('profiles').insert({
+            id: userId,
+            email: user.email,
+            name: user.name,
+            avatar_url: user.image,
+            provider: account?.provider || 'google',
+            credits: FREE_CREDITS,
+            updated_at: new Date().toISOString(),
+          })
+        }
       } catch (err) {
         // Don't block sign-in if DB is down — graceful degradation
         console.error('[Auth] Supabase user sync failed:', err)

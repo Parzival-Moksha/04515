@@ -39,6 +39,7 @@ export interface ProviderTier {
   description: string
   estimatedSeconds: number
   estimatedCost: string
+  creditCost: number           // 1 credit = $1. Deducted before pipeline starts.
 }
 
 export interface ProviderDefinition {
@@ -54,8 +55,8 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: 'Meshy',
     envKey: 'MESHY_API_KEY',
     tiers: [
-      { id: 'preview', name: 'Preview', description: 'Fast untextured mesh (meshy-6)', estimatedSeconds: 30, estimatedCost: '20 credits' },
-      { id: 'refine', name: 'Refine', description: 'Full PBR textured model', estimatedSeconds: 120, estimatedCost: '30 credits' },
+      { id: 'preview', name: 'Preview', description: 'Fast untextured mesh (meshy-6)', estimatedSeconds: 30, estimatedCost: '$1', creditCost: 1 },
+      { id: 'refine', name: 'Refine', description: 'Full PBR textured model', estimatedSeconds: 120, estimatedCost: '$1', creditCost: 1 },
     ],
   },
   {
@@ -63,12 +64,44 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: 'Tripo',
     envKey: 'TRIPO_API_KEY',
     tiers: [
-      { id: 'turbo', name: 'Turbo', description: 'Blazing fast (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '~20 credits' },
-      { id: 'draft', name: 'Draft', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '~40 credits' },
-      { id: 'standard', name: 'Standard', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '~40 credits' },
-      { id: 'premium', name: 'Premium', description: 'Sculpture-level detail (v3.1)', estimatedSeconds: 60, estimatedCost: '~40 credits' },
+      { id: 'turbo', name: 'Turbo', description: 'Blazing fast (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '$1', creditCost: 1 },
+      { id: 'draft', name: 'Draft', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '$1', creditCost: 1 },
+      { id: 'standard', name: 'Standard', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '$1', creditCost: 1 },
+      { id: 'premium', name: 'Premium', description: 'Sculpture-level detail (v3.1)', estimatedSeconds: 60, estimatedCost: '$1', creditCost: 1 },
     ],
   },
+]
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CREDIT COSTS — 1 credit = $1. Post-processing charged per operation.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const POST_PROCESS_COSTS: Record<string, number> = {
+  texture: 1,
+  remesh: 1,
+  rig: 1,
+  animate: 1,
+}
+
+// New users get this many free credits to try the Forge
+export const FREE_CREDITS = 3
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CREDIT PACKS — Stripe checkout line items
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface CreditPack {
+  id: string
+  credits: number
+  priceUsd: number          // cents for Stripe (e.g. 500 = $5)
+  label: string
+  popular?: boolean
+}
+
+export const CREDIT_PACKS: CreditPack[] = [
+  { id: 'pack_5',   credits: 5,   priceUsd: 500,   label: '5 Credits — $5' },
+  { id: 'pack_25',  credits: 25,  priceUsd: 2000,  label: '25 Credits — $20', popular: true },
+  { id: 'pack_100', credits: 100, priceUsd: 7000,  label: '100 Credits — $70' },
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
