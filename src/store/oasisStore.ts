@@ -823,7 +823,19 @@ export const useOasisStore = create<OasisState>((set, get) => {
       getWorldRegistry(),
       getSceneLibrary(),
     ])
-    set({ worldRegistry: registry, sceneLibrary: library })
+
+    // If stored activeWorldId doesn't exist in the registry (e.g. old 'forge-default'
+    // from pre-Supabase era), switch to the first available world
+    const currentId = get().activeWorldId
+    const worldExists = registry.some(w => w.id === currentId)
+    if (!worldExists && registry.length > 0) {
+      const firstWorld = registry[0]
+      setActiveWorldId(firstWorld.id)
+      set({ worldRegistry: registry, sceneLibrary: library, activeWorldId: firstWorld.id })
+    } else {
+      set({ worldRegistry: registry, sceneLibrary: library })
+    }
+
     // Load active world state
     get().loadWorldState()
   },

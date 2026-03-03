@@ -4,15 +4,15 @@
 //
 //   GET    /api/worlds/[id]  — Load world state
 //   PUT    /api/worlds/[id]  — Save world state (debounced on client)
-//   DELETE /api/worlds/[id]  — Delete world + remove from registry
+//   DELETE /api/worlds/[id]  — Delete world
 //
 // ░▒▓█ WORLD [ID] ROUTE █▓▒░
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 import {
-  loadWorldFromDisk, saveWorldToDisk, deleteWorldFromDisk,
-  getRegistry, saveRegistry,
+  loadWorld, saveWorld, deleteWorld, getRegistry,
   type WorldState,
 } from '@/lib/forge/world-server'
 
@@ -24,8 +24,13 @@ type RouteContext = { params: Promise<{ id: string }> }
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await context.params
-    const world = loadWorldFromDisk(id)
+    const world = await loadWorld(id, session.user.id)
     if (!world) {
       return NextResponse.json({ error: 'World not found' }, { status: 404 })
     }
@@ -44,10 +49,15 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await context.params
     const body = await request.json()
 
-    saveWorldToDisk(id, body as Omit<WorldState, 'version' | 'savedAt'>)
+    await saveWorld(id, session.user.id, body as Omit<WorldState, 'version' | 'savedAt'>)
 
     return NextResponse.json({ ok: true, savedAt: new Date().toISOString() })
   } catch (err) {
@@ -58,23 +68,25 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DELETE /api/worlds/[id] — Delete world file + registry entry
+// DELETE /api/worlds/[id] — Delete world
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params
-
-    // Can't delete the default world — it's the forge's bedrock
-    if (id === 'forge-default') {
-      return NextResponse.json({ error: 'Cannot delete default world' }, { status: 400 })
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    deleteWorldFromDisk(id)
+    const { id } = await context.params
 
-    // Also remove from registry
-    const registry = getRegistry().filter(w => w.id !== id)
-    saveRegistry(registry)
+    // Don't let user delete their last world
+    const registry = await getRegistry(session.user.id)
+    if (registry.length <= 1) {
+      return NextResponse.json({ error: 'Cannot delete your only world' }, { status: 400 })
+    }
+
+    await deleteWorld(id, session.user.id)
 
     return NextResponse.json({ ok: true, deleted: id })
   } catch (err) {

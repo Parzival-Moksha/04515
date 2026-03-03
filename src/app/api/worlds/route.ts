@@ -2,36 +2,31 @@
 // THE FORGE — World Persistence API
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 //
-//   ╔═══════════════════════════════════════════════════════════════════╗
-//   ║                                                                   ║
-//   ║    GET  /api/worlds        — List all worlds (registry)           ║
-//   ║    POST /api/worlds        — Create new world / import           ║
-//   ║                                                                   ║
-//   ║    Minecraft-style file persistence:                              ║
-//   ║    one JSON per world, one registry to rule them all.            ║
-//   ║                                                                   ║
-//   ║    "Not all who wander are lost,                                  ║
-//   ║     but their worlds are finally saved."                          ║
-//   ║                                    — Tolkien, if he vibed        ║
-//   ║                                                                   ║
-//   ╚═══════════════════════════════════════════════════════════════════╝
+//   GET  /api/worlds        — List all worlds for current user
+//   POST /api/worlds        — Create new world / import
 //
 // ░▒▓█ WORLDS ROUTE █▓▒░
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 import {
-  getRegistry, createWorldOnDisk, saveWorldToDisk,
-  type WorldMeta, type WorldState,
+  getRegistry, createWorld, saveWorld,
+  type WorldState,
 } from '@/lib/forge/world-server'
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GET /api/worlds — All known worlds
+// GET /api/worlds — All worlds for the authenticated user
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function GET() {
   try {
-    const registry = getRegistry()
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const registry = await getRegistry(session.user.id)
     return NextResponse.json(registry)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -49,6 +44,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const userId = session.user.id
     const body = await request.json()
 
     // ░▒▓ Import path ▓▒░
@@ -59,8 +60,8 @@ export async function POST(request: Request) {
       }
       const name = body.meta?.name || 'Imported World'
       const icon = body.meta?.icon || '📦'
-      const meta = createWorldOnDisk(name, icon)
-      saveWorldToDisk(meta.id, {
+      const meta = await createWorld(name, icon, userId)
+      await saveWorld(meta.id, userId, {
         terrain: state.terrain,
         craftedScenes: state.craftedScenes || [],
         conjuredAssetIds: state.conjuredAssetIds || [],
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
         transforms: state.transforms || {},
         behaviors: state.behaviors,
         groundPresetId: state.groundPresetId,
+        groundTiles: state.groundTiles,
+        lights: state.lights,
+        skyBackgroundId: state.skyBackgroundId,
       })
       return NextResponse.json(meta, { status: 201 })
     }
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing "name" field' }, { status: 400 })
     }
 
-    const meta = createWorldOnDisk(body.name, body.icon || '🌍')
+    const meta = await createWorld(body.name, body.icon || '🌍', userId)
     return NextResponse.json(meta, { status: 201 })
 
   } catch (err) {

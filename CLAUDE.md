@@ -41,6 +41,12 @@ vibedev also runs:
 
 Building it IS the spiritual work.
 
+### Cross-Project Paths (vibedev's cyberhome)
+- `c:\oasis-website\` — **04515.xyz** marketing site (Vercel-hosted). OK to read/edit.
+- `c:\b8_parzival\` — **Parzival** monorepo (Oasis was extracted from here). Reference only.
+- `c:\b9_devcraft\` — **DevCraft** project. Reference only.
+- Domain: **04515.xyz** — the public face. App will live at app.04515.xyz or similar.
+
 
 ```
 git commit -m "ॐ right effort: ship shit ॐ"

@@ -38,6 +38,7 @@ import { WizardConsole } from './forge/WizardConsole'
 // AssetExplorerWindow deleted — functionality lives in WizardConsole
 import { ObjectInspector } from './forge/ObjectInspector'
 import { ActionLogButton, ActionLogPanel } from './forge/ActionLog'
+import { ProfileButton } from './forge/ProfileButton'
 import { useWorldLoader } from './forge/WorldObjects'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -708,8 +709,9 @@ export default function Scene() {
         </div>
       )}
 
-      {/* ─═̷─═̷─🔮─═̷─═̷─ TOP-LEFT BUTTON BAR — Settings, Wizard, Action Log ─═̷─═̷─🔮─═̷─═̷─ */}
+      {/* ─═̷─═̷─🔮─═̷─═̷─ TOP-LEFT BUTTON BAR — Profile, Settings, Wizard, Action Log ─═̷─═̷─🔮─═̷─═̷─ */}
       <div className="fixed top-4 left-4 z-[200] flex items-start gap-2">
+        <ProfileButton />
         <SettingsGear>
           <SettingsContent />
         </SettingsGear>

@@ -142,7 +142,7 @@ export function RealmSelector() {
                   )}
                 </button>
                 {/* Delete button (not for default world) */}
-                {world.id !== 'forge-default' && (
+                {worldRegistry.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

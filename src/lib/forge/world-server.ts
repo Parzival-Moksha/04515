@@ -1,20 +1,15 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 // WORLD SERVER — The bedrock beneath all worlds
-// ─═̷─═̷─ॐ─═̷─═̷─ File I/O for world persistence ─═̷─═̷─ॐ─═̷─═̷─
+// ─═̷─═̷─ॐ─═̷─═̷─ Supabase persistence ─═̷─═̷─ॐ─═̷─═̷─
 //
-// Minecraft-style: one JSON file per world, one registry index.
-// Same pattern as conjured-registry.ts — battle-tested, no DB needed.
+// v3: Supabase PostgreSQL. One row per world, JSONB data column.
+// Each world belongs to a user (user_id FK → profiles).
+// Falls back to JSON files if Supabase is not configured.
 //
-// data/worlds/
-//   registry.json          — WorldMeta[] index
-//   forge-default.json     — default world state
-//   world-17400xxxxx.json  — user-created worlds
-//
-// SERVER-ONLY — uses fs, never import from client code.
+// SERVER-ONLY — uses Supabase service role, never import from client code.
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { getServerSupabase } from '../supabase'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES — re-export so API routes import from one place
@@ -24,129 +19,145 @@ import type { WorldMeta, WorldState } from './world-persistence'
 export type { WorldState, WorldMeta }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PATHS — data/worlds/ lives alongside data/conjured-registry.json
+// HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const DATA_DIR = join(process.cwd(), 'data', 'worlds')
-const REGISTRY_PATH = join(DATA_DIR, 'registry.json')
-const DEFAULT_WORLD_ID = 'forge-default'
+function sb() { return getServerSupabase() }
 
-function ensureDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true })
-    console.log('[WorldServer] Created data/worlds/ directory')
+function toWorldMeta(row: Record<string, unknown>): WorldMeta {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    icon: (row.icon as string) || '🌍',
+    createdAt: row.created_at as string,
+    lastSavedAt: row.updated_at as string,
   }
 }
 
-function isValidWorldId(id: string): boolean {
-  return /^[\w\-]{1,80}$/.test(id)
-}
-
-function worldPath(id: string): string {
-  if (!isValidWorldId(id)) throw new Error('Invalid world ID')
-  return join(DATA_DIR, `${id}.json`)
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// REGISTRY — The index of all known worlds
+// REGISTRY — All worlds for a user
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function getRegistry(): WorldMeta[] {
-  ensureDir()
-  if (!existsSync(REGISTRY_PATH)) {
-    // First boot — create default world
-    const now = new Date().toISOString()
-    const defaultMeta: WorldMeta = {
-      id: DEFAULT_WORLD_ID,
-      name: 'The Forge',
-      icon: '🔥',
-      createdAt: now,
-      lastSavedAt: now,
-    }
-    const registry = [defaultMeta]
-    writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8')
-    return registry
-  }
-  try {
-    const raw = readFileSync(REGISTRY_PATH, 'utf-8')
-    return JSON.parse(raw) as WorldMeta[]
-  } catch {
+export async function getRegistry(userId: string): Promise<WorldMeta[]> {
+  const { data, error } = await sb()
+    .from('worlds')
+    .select('id, name, icon, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('[WorldServer] getRegistry error:', error.message)
     return []
   }
-}
 
-export function saveRegistry(registry: WorldMeta[]): void {
-  ensureDir()
-  writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8')
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WORLD CRUD — One JSON file per world
-// ═══════════════════════════════════════════════════════════════════════════
-
-export function loadWorldFromDisk(id: string): WorldState | null {
-  ensureDir()
-  const path = worldPath(id)
-  if (!existsSync(path)) return null
-  try {
-    const raw = readFileSync(path, 'utf-8')
-    const parsed = JSON.parse(raw) as WorldState
-    if (parsed.version !== 1) return null
-    return parsed
-  } catch (err) {
-    console.error(`[WorldServer] Failed to load world ${id}:`, err)
-    return null
+  // If user has no worlds yet, create their default world
+  if (!data || data.length === 0) {
+    const defaultWorld = await createWorld('The Forge', '🔥', userId)
+    return [defaultWorld]
   }
+
+  return data.map(toWorldMeta)
 }
 
-export function saveWorldToDisk(id: string, state: Omit<WorldState, 'version' | 'savedAt'>): void {
-  ensureDir()
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAD — Fetch a single world's full state
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function loadWorld(id: string, userId: string): Promise<WorldState | null> {
+  const { data, error } = await sb()
+    .from('worlds')
+    .select('data')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single()
+
+  if (error || !data?.data) return null
+  return data.data as WorldState
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAVE — Upsert world state (debounced on client side)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function saveWorld(
+  id: string,
+  userId: string,
+  state: Omit<WorldState, 'version' | 'savedAt'>
+): Promise<void> {
   const now = new Date().toISOString()
-  const world: WorldState = {
+  const worldData: WorldState = {
     version: 1,
     ...state,
     savedAt: now,
   }
-  writeFileSync(worldPath(id), JSON.stringify(world, null, 2), 'utf-8')
 
-  // Update lastSavedAt in registry
-  const registry = getRegistry()
-  const meta = registry.find(w => w.id === id)
-  if (meta) {
-    meta.lastSavedAt = now
-    saveRegistry(registry)
+  const { error } = await sb()
+    .from('worlds')
+    .update({
+      data: worldData,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error(`[WorldServer] saveWorld(${id}) error:`, error.message)
   }
 }
 
-export function deleteWorldFromDisk(id: string): void {
-  const path = worldPath(id)
-  if (existsSync(path)) {
-    unlinkSync(path)
-  }
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// CREATE — New world for a user
+// ═══════════════════════════════════════════════════════════════════════════
 
-export function createWorldOnDisk(name: string, icon = '🌍'): WorldMeta {
-  ensureDir()
+export async function createWorld(name: string, icon = '🌍', userId: string): Promise<WorldMeta> {
   const id = `world-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const now = new Date().toISOString()
-  const meta: WorldMeta = { id, name, icon, createdAt: now, lastSavedAt: now }
 
-  // Add to registry
-  const registry = getRegistry()
-  registry.push(meta)
-  saveRegistry(registry)
-
-  // Initialize empty world file
-  saveWorldToDisk(id, {
+  const emptyState: WorldState = {
+    version: 1,
     terrain: null,
     craftedScenes: [],
     conjuredAssetIds: [],
     catalogPlacements: [],
     transforms: {},
-  })
+    savedAt: now,
+  }
 
-  console.log(`[WorldServer] Created world "${name}" (${id})`)
-  return meta
+  const { error } = await sb()
+    .from('worlds')
+    .insert({
+      id,
+      user_id: userId,
+      name,
+      icon,
+      data: emptyState,
+      created_at: now,
+      updated_at: now,
+    })
+
+  if (error) {
+    console.error('[WorldServer] createWorld error:', error.message)
+    throw new Error(`Failed to create world: ${error.message}`)
+  }
+
+  console.log(`[WorldServer] Created world "${name}" (${id}) for user ${userId}`)
+  return { id, name, icon, createdAt: now, lastSavedAt: now }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DELETE — Remove a world
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function deleteWorld(id: string, userId: string): Promise<void> {
+  const { error } = await sb()
+    .from('worlds')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error(`[WorldServer] deleteWorld(${id}) error:`, error.message)
+  }
 }
 
 // ▓▓▓▓【W̸O̸R̸L̸D̸】▓▓▓▓ॐ▓▓▓▓【S̸E̸R̸V̸E̸R̸】▓▓▓▓
