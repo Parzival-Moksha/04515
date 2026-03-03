@@ -41,6 +41,9 @@ public/conjured/*
 !public/conjured/conj_mm75f0f23s3h_thumb.jpg
 !public/conjured/conj_mm75g1uj21th.glb
 !public/conjured/conj_mm75g1uj21th_thumb.jpg
+# Eiffel Tower — first production conjuration
+!public/conjured/conj_mmatfnjvhtfw.glb
+!public/conjured/conj_mmatfnjvhtfw_thumb.jpg
 
 # Runtime-generated thumbnails
 public/crafted-thumbs/*
@@ -51,13 +54,18 @@ public/thumbs/
 *.blend.zip
 *.gltf.zip
 
-# Runtime data (user worlds)
+# Runtime data (per-instance, diverges between local dev and prod)
+data/conjured-registry.json
+data/scene-library.json
 data/worlds/*.json
 !data/worlds/forge-default.json
 
 # Backup / working copies of data files
 data/*-full.json
 data/*-showcase.json
+
+# Server deploy script (lives on VPS only)
+deploy.sh
 
 # PM2 / logs
 logs/

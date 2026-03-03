@@ -116,11 +116,23 @@ TRIPO_API_KEY=       # Text-to-3D
 OPENROUTER_API_KEY=  # LLM craft + terrain (routes to Sonnet)
 ```
 
+### Production Deployment
+- **Server**: Helsinki VPS (Hetzner, ARM64, 4vCPU/8GB), Ubuntu 24.04
+- **URL**: `https://app.04515.xyz`
+- **Stack**: pm2 (process manager) + nginx (reverse proxy + static files) + certbot (SSL)
+- **Path**: `/opt/oasis/` on Helsinki
+- **SSH**: `ssh helsinki` (configured in ~/.ssh/config)
+- **Deploy**: `ssh helsinki "bash /opt/oasis/deploy.sh"` (git pull → pnpm install → build → pm2 restart)
+- **Logs**: `ssh helsinki "pm2 logs oasis --lines 50"`
+- **IMPORTANT**: nginx serves `/conjured/`, `/thumbs/`, `/models/`, `/crafted-thumbs/` directly from disk (bypasses Next.js). This is necessary because `next start` only serves `public/` files that existed at build time. Runtime-generated GLBs need nginx to serve them.
+- **AUTH_TRUST_HOST=true** required in prod .env (NextAuth v5 behind reverse proxy)
+- **Runtime data files** (`conjured-registry.json`, `scene-library.json`) are gitignored — each instance (local dev, production) maintains its own. Worlds are in Supabase (shared).
+
 ### Persistence
-- `data/conjured-registry.json` — asset metadata (globalThis singleton cache, staleness reaper)
-- `data/worlds/` — world save files (JSON, per-world)
-- `data/scene-library.json` — saved crafted scenes
-- `public/conjured/` — GLB files (runtime-generated, gitignored)
+- `data/conjured-registry.json` — asset metadata (gitignored, per-instance runtime state)
+- `data/worlds/` — LEGACY, worlds now live in Supabase JSONB
+- `data/scene-library.json` — saved crafted scenes (gitignored, per-instance)
+- `public/conjured/` — GLB files (runtime-generated, showcase assets whitelisted in .gitignore)
 
 ---
 

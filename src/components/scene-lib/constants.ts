@@ -15,14 +15,14 @@ export const defaultSettings: OasisSettings = {
   chromaticEnabled: false,
   showOrbitTarget: true,      // Show orbit pivot sphere
   skyBackground: 'night007',
-  uiOpacity: 0.95,
+  uiOpacity: 0.3,            // Transparent UI — lets the 3D world breathe
   // ─═̷─═̷─⚡ FPS COUNTER ─═̷─═̷─⚡
   fpsCounterEnabled: true,
   fpsCounterFontSize: 14,
   // ─═̷─═̷─🪟 WINDOW OPACITY ─═̷─═̷─🪟
   streamOpacity: 0.9,
   // ─═̷─═̷─🎮 QUAKE FPS CONTROLS ─═̷─═̷─🎮
-  controlMode: 'orbit',       // Default to orbit mode (classic behavior)
+  controlMode: 'fps',         // FPS mode — gamers gonna game
   mouseSensitivity: 1.0,      // FPS mouse sensitivity (0.1-2.0)
   moveSpeed: 10,              // FPS movement speed (1-20)
 }

@@ -573,6 +573,18 @@
         -3.839613936764506
       ],
       "scale": 1
+    },
+    {
+      "id": "catalog-conjured-1772505089459-mwdd-1772505089460",
+      "catalogId": "conjured-1772505089459-mwdd",
+      "name": "Moana Boat",
+      "glbPath": "/conjured/conj_mlvfxxqw9lsh.glb",
+      "position": [
+        7.108345009465995,
+        0,
+        7.4202658935305585
+      ],
+      "scale": 1
     }
   ],
   "transforms": {
@@ -752,6 +764,23 @@
         1,
         1
       ]
+    },
+    "catalog-conjured-1772505089459-mwdd-1772505089460": {
+      "position": [
+        39.8916412054876,
+        3.48360986381533,
+        30.32342363085727
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        5.474469253974451,
+        5.474469253974451,
+        5.474469253974451
+      ]
     }
   },
   "behaviors": {
@@ -767,6 +796,14 @@
         "type": "spin",
         "axis": "y",
         "speed": 0.1
+      },
+      "visible": true
+    },
+    "catalog-conjured-1772505089459-mwdd-1772505089460": {
+      "movement": {
+        "type": "patrol",
+        "radius": 6,
+        "speed": 0.5
       },
       "visible": true
     }
@@ -835,5 +872,5 @@
     }
   ],
   "skyBackgroundId": "sunset",
-  "savedAt": "2026-03-01T14:33:27.787Z"
+  "savedAt": "2026-03-03T02:32:25.440Z"
 }
