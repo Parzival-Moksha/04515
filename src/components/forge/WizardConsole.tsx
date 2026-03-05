@@ -373,7 +373,7 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
               <button
                 onClick={(e) => { e.stopPropagation(); onRig(asset.id) }}
                 className="text-[10px] py-0.5 px-1.5 rounded border transition-colors font-mono text-amber-400/80 border-amber-500/20 hover:text-amber-300 hover:border-amber-500/40 bg-amber-500/5"
-                title="Auto-rig: add skeleton + free walk/run animations (5 credits)"
+                title="Auto-rig: add skeleton + walk/run animations (0.5 credits)"
               >
                 &#9760; Rig
               </button>
@@ -715,6 +715,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
     setPrompt('')
     setActiveCrafts(n => n + 1)
     setCraftingState(true, craftPrompt)
+    // ░▒▓ WORLD ISOLATION — capture origin world at craft start ▓▒░
+    // If user switches worlds mid-craft, result must land in the ORIGIN world.
+    const originWorldId = useOasisStore.getState().activeWorldId
 
     // Build iterative context — include previous scene if exists
     const lastScene = craftedScenes[craftedScenes.length - 1]
@@ -736,11 +739,29 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
 
       const data = await res.json()
       if (data.scene) {
-        addCraftedScene(data.scene as CraftedScene)
+        // ░▒▓ WORLD ISOLATION — if user switched worlds mid-craft, save directly to origin
+        // world via server API without touching the UI store. No flicker, no state corruption. ▓▒░
+        const currentWorldId = useOasisStore.getState().activeWorldId
+        if (currentWorldId !== originWorldId) {
+          console.log(`[Forge:Craft] World changed during craft (${originWorldId} → ${currentWorldId}). Saving result to origin world via API.`)
+          try {
+            const { loadWorld, saveWorld } = await import('../../lib/forge/world-persistence')
+            const originState = await loadWorld(originWorldId)
+            if (originState) {
+              const updatedScenes = [...(originState.craftedScenes || []), data.scene as CraftedScene]
+              await saveWorld({ ...originState, craftedScenes: updatedScenes }, originWorldId)
+              console.log(`[Forge:Craft] Scene saved to origin world ${originWorldId}`)
+            }
+          } catch (saveErr) {
+            console.error('[Forge:Craft] Failed to save to origin world:', saveErr)
+          }
+        } else {
+          addCraftedScene(data.scene as CraftedScene)
+        }
         // ░▒▓ Fire-and-forget thumbnail — darkroom develops the portrait in the background ▓▒░
         generateSingleCraftedThumbnail(data.scene as CraftedScene).catch(() => {})
         // ░▒▓ XP — crafting is creation ▓▒░
-        awardXp('CRAFT_SCENE', useOasisStore.getState().activeWorldId)
+        awardXp('CRAFT_SCENE', originWorldId)
         // Track conversation for iterative mode
         setCraftHistory(prev => [
           ...prev,
@@ -1022,9 +1043,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </select>
                   <select value={tier} onChange={(e) => setTier(e.target.value)}
                     className="text-[11px] bg-black/60 border border-gray-700 rounded px-2 py-1 text-gray-300 focus:border-orange-500/50 focus:outline-none cursor-pointer">
-                    {selectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {selectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.creditCost} cr)</option>)}
                   </select>
-                  <span className="text-[9px] text-gray-400 font-mono ml-auto">~{selectedTier.estimatedSeconds}s | {selectedTier.estimatedCost}</span>
+                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{selectedTier.estimatedSeconds}s | {selectedTier.creditCost} credit{selectedTier.creditCost !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Stuff / Character toggle + auto-pipeline */}
@@ -2233,6 +2254,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 font-mono">Conjuration Effect</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {([
+                    { id: 'random' as const, label: 'Random', desc: 'Different effect each time', icon: '\u{1F3B2}' },
                     { id: 'textswirl' as const, label: 'Text Swirl', desc: 'Prompt tokens orbit and collapse', icon: '\u2728' },
                     { id: 'arcane' as const, label: 'Arcane Circle', desc: 'Sacred geometry + light pillars', icon: '\u26E2' },
                     { id: 'vortex' as const, label: 'Particle Vortex', desc: 'Atom storm converges into form', icon: '\u{1F300}' },
@@ -2268,6 +2290,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 font-mono">Placement Spell Effect</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {([
+                    { id: 'random' as PlacementVfxType, label: 'Random', desc: 'Different spell each time', icon: '\u{1F3B2}' },
                     { id: 'runeflash' as PlacementVfxType, label: 'Rune Flash', desc: 'Arcane circle glows on ground', icon: '\u2726' },
                     { id: 'sparkburst' as PlacementVfxType, label: 'Spark Burst', desc: '200 particles shower outward', icon: '\u2604' },
                     { id: 'portalring' as PlacementVfxType, label: 'Portal Ring', desc: 'Glowing ring rises through object', icon: '\u25CE' },

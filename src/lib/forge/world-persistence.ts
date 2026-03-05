@@ -197,6 +197,15 @@ export function debouncedSaveWorld(state: Omit<WorldState, 'version' | 'savedAt'
   }, delayMs)
 }
 
+/** ░▒▓ Cancel any pending debounced save — MUST be called before world switch ▓▒░
+ * Prevents stale saves from overwriting the new world's state (especially lights). */
+export function cancelPendingSave(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MIGRATION — no-op now. localStorage worlds are origin-locked ghosts.
 // Dev imports old worlds via console dump → importWorld().

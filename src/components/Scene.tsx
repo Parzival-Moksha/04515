@@ -357,17 +357,11 @@ const AXIS_LEN = 0.25
 
 function OrbitTargetSphere({ controlsRef }: { controlsRef: React.RefObject<any> }) {
   const groupRef = useRef<THREE.Group>(null)
-  const coreMatRef = useRef<THREE.MeshStandardMaterial>(null)
 
-  useFrame((state) => {
+  useFrame(() => {
     if (!groupRef.current || !controlsRef.current) return
     const t = controlsRef.current.target
     groupRef.current.position.set(t.x, t.y, t.z)
-
-    if (coreMatRef.current) {
-      const pulse = 0.4 + Math.sin(state.clock.elapsedTime * 2.5) * 0.35
-      coreMatRef.current.emissiveIntensity = pulse
-    }
   })
 
   return (
@@ -375,21 +369,18 @@ function OrbitTargetSphere({ controlsRef }: { controlsRef: React.RefObject<any> 
       <mesh renderOrder={999}>
         <sphereGeometry args={[0.03, 16, 16]} />
         <meshStandardMaterial
-          ref={coreMatRef}
           color="#c0c0d0"
           metalness={0.92}
           roughness={0.12}
-          emissive="#a855f7"
-          emissiveIntensity={0.4}
           transparent
           opacity={0.95}
           depthTest={false}
         />
       </mesh>
 
-      <Line points={RING_XZ} color="#a855f7" lineWidth={1.5} transparent opacity={0.5} />
-      <Line points={RING_XY} color="#a855f7" lineWidth={1.0} transparent opacity={0.3} />
-      <Line points={RING_YZ} color="#a855f7" lineWidth={1.0} transparent opacity={0.3} />
+      <Line points={RING_XZ} color="#c0c0d0" lineWidth={1.5} transparent opacity={0.5} />
+      <Line points={RING_XY} color="#c0c0d0" lineWidth={1.0} transparent opacity={0.3} />
+      <Line points={RING_YZ} color="#c0c0d0" lineWidth={1.0} transparent opacity={0.3} />
 
       <Line points={[[-AXIS_LEN, 0, 0], [AXIS_LEN, 0, 0]]} color="#ef4444" lineWidth={1.0} transparent opacity={0.45} />
       <Line points={[[0, -AXIS_LEN, 0], [0, AXIS_LEN, 0]]} color="#22c55e" lineWidth={1.0} transparent opacity={0.45} />
@@ -645,7 +636,7 @@ export default function Scene() {
               enableZoom={!isDragging}
               enableRotate={!isDragging}
               enableDamping={false}
-              minDistance={3}
+              minDistance={0.3}
               maxDistance={500}
             />
             {settings.showOrbitTarget && <OrbitTargetSphere controlsRef={orbitControlsRef} />}

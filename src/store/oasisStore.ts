@@ -11,7 +11,7 @@ import {
   loadWorld, debouncedSaveWorld, saveWorld,
   getWorldRegistry, getActiveWorldId, setActiveWorldId,
   createWorld, deleteWorld, exportWorld, importWorld,
-  migrateIfNeeded,
+  migrateIfNeeded, cancelPendingSave,
   type WorldMeta,
 } from '../lib/forge/world-persistence'
 import { addToSceneLibrary, getSceneLibrary, removeFromSceneLibrary } from '../lib/forge/scene-library'
@@ -33,11 +33,17 @@ const persist = (key: string, value: string): void => { if (isBrowser) localStor
 export type ConjureVfxType =
   | 'textswirl' | 'arcane' | 'vortex'
   | 'quantumassembly' | 'primordialcauldron' | 'stellarnursery' | 'chronoforge' | 'abyssalemergence'
+  | 'random'
+
+export const CONJURE_VFX_LIST: Exclude<ConjureVfxType, 'random'>[] = ['textswirl', 'arcane', 'vortex', 'quantumassembly', 'primordialcauldron', 'stellarnursery', 'chronoforge', 'abyssalemergence']
 
 export type PlacementVfxType =
   | 'runeflash' | 'sparkburst' | 'portalring' | 'sigilpulse'
   | 'quantumcollapse' | 'phoenixascension' | 'dimensionalrift' | 'crystalgenesis'
   | 'meteorimpact' | 'arcanebloom' | 'voidanchor' | 'stellarforge'
+  | 'random'
+
+const PLACEMENT_VFX_LIST: Exclude<PlacementVfxType, 'random'>[] = ['runeflash', 'sparkburst', 'portalring', 'sigilpulse', 'quantumcollapse', 'phoenixascension', 'dimensionalrift', 'crystalgenesis', 'meteorimpact', 'arcanebloom', 'voidanchor', 'stellarforge']
 
 export interface PlacementPending {
   type: 'catalog' | 'conjured' | 'crafted' | 'library'
@@ -353,15 +359,19 @@ export const useOasisStore = create<OasisState>((set, get) => {
     setTimeout(() => get().saveWorldState(), 100)
   },
   addCraftedScene: (scene) => {
+    // ░▒▓ SPAWN OFFSET — place crafted scene where the crafting VFX played ▓▒░
+    const activeConjures = get().conjuredAssets.filter(a => !['ready', 'failed'].includes(a.status)).length
+    const craftX = activeConjures * 4 + (activeConjures > 0 ? 4 : 0)
+    const offsetScene = { ...scene, position: [craftX, scene.position[1], scene.position[2]] as [number, number, number] }
     withUndo('Add crafted', '🔮', () => {
-      set((state) => ({ craftedScenes: [...state.craftedScenes, scene] }))
+      set((state) => ({ craftedScenes: [...state.craftedScenes, offsetScene] }))
     })
     // Persist to library — survives deletion from world
-    addToSceneLibrary(scene).then(() =>
+    addToSceneLibrary(offsetScene).then(() =>
       getSceneLibrary().then(lib => set({ sceneLibrary: lib }))
     )
     // ░▒▓ Spell VFX on materialization ▓▒░
-    get().spawnPlacementVfx(scene.position)
+    get().spawnPlacementVfx(offsetScene.position)
     // Auto-save world on scene add
     setTimeout(() => get().saveWorldState(), 100)
   },
@@ -490,10 +500,14 @@ export const useOasisStore = create<OasisState>((set, get) => {
 
   spawnPlacementVfx: (position) => {
     const { placementVfxType, placementVfxDuration } = get()
+    // ░▒▓ RANDOM — resolve to a concrete VFX type ▓▒░
+    const resolvedType = placementVfxType === 'random'
+      ? PLACEMENT_VFX_LIST[Math.floor(Math.random() * PLACEMENT_VFX_LIST.length)]
+      : placementVfxType
     const vfx: ActivePlacementVfx = {
       id: `vfx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       position,
-      type: placementVfxType,
+      type: resolvedType,
       startedAt: performance.now(),
       duration: placementVfxDuration,
     }
@@ -636,6 +650,8 @@ export const useOasisStore = create<OasisState>((set, get) => {
       catalogPlacements: get().placedCatalogAssets,
       transforms: get().transforms,
       behaviors: get().behaviors,
+      lights: get().worldLights,
+      skyBackgroundId: get().worldSkyBackground,
     })
   },
   // ─═̷─═̷─🌅 SKY — per-world sky preset ─═̷─═̷─🌅
@@ -717,6 +733,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
 
   // ─═̷─═̷─🌍 MULTI-WORLD ACTIONS ─═̷─═̷─🌍
   switchWorld: (worldId) => {
+    // ░▒▓ RACE CONDITION FIX — kill any pending debounced saves from the OLD world ▓▒░
+    // Without this, a stale save timer can fire AFTER the new world loads,
+    // overwriting the new world's lights/sky with the old world's stale state.
+    cancelPendingSave()
     // Save current world first (immediate, not debounced)
     const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
     saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)

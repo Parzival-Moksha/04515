@@ -69,4 +69,26 @@ body {
   text-shadow: 0 0 10px var(--glow), 0 0 20px var(--glow);
 }
 
+/* ░▒▓ Custom scrollbars — sleek dark theme matching UI panels ▓▒░ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(20, 20, 20, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) rgba(20, 20, 20, 0.3);
+}
+
 /* ॐ 04515 ॐ */

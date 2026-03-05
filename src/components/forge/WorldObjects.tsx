@@ -15,7 +15,7 @@ import { useFrame } from '@react-three/fiber'
 import { TransformControls, useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
-import { useOasisStore } from '../../store/oasisStore'
+import { useOasisStore, type ConjureVfxType, CONJURE_VFX_LIST } from '../../store/oasisStore'
 import { ConjuredObjectSafe } from './ConjuredObject'
 import { CraftedSceneRenderer, PrimitiveGeometry } from './CraftedSceneRenderer'
 import { ConjureVFX } from './ConjureVFX'
@@ -531,10 +531,17 @@ export function useWorldLoader() {
                 console.log(`[Forge:Poller] Discovered ${newChildren.length} new child asset(s): ${newChildren.map((a: { id: string }) => a.id).join(', ')}`)
                 // Merge into store — spread current (preserves client positions) + append new
                 useOasisStore.getState().setConjuredAssets([...currentAssets, ...newChildren])
-                // Auto-place discovered children in the current world so they render on the map
+                // ░▒▓ WORLD ISOLATION — only auto-place children whose PARENT is in this world ▓▒░
+                // Without this, multi-tab scenarios auto-place children into whatever world
+                // is active in EACH tab, causing assets to spawn in the wrong world.
                 const currentWorldIds = useOasisStore.getState().worldConjuredAssetIds
                 const newWorldIds = newChildren
-                  .filter((a: { id: string }) => !currentWorldIds.includes(a.id))
+                  .filter((a: { id: string; sourceAssetId?: string }) => {
+                    if (currentWorldIds.includes(a.id)) return false  // already placed
+                    // Only auto-place if parent is in this world (or if no parent, it's a root asset from this tab)
+                    if (a.sourceAssetId) return currentWorldIds.includes(a.sourceAssetId)
+                    return false  // root assets are placed by useConjure, not auto-discovery
+                  })
                   .map((a: { id: string }) => a.id)
                 if (newWorldIds.length > 0) {
                   useOasisStore.setState(state => ({
@@ -749,6 +756,7 @@ function PlacementOverlay() {
 
   const handleClick = useCallback((e: any) => {
     e.stopPropagation()
+    if (document.pointerLockElement) return  // FPS mode — don't intercept
     if (!placementPending) return
     const point = e.point as THREE.Vector3
     const pos: [number, number, number] = [point.x, 0, point.z]
@@ -786,6 +794,10 @@ function PlacementOverlay() {
   }, [placementPending, placeCatalogAssetAt, placeLibrarySceneAt, cancelPlacement])
 
   const handlePointerMove = useCallback((e: any) => {
+    // ░▒▓ FPS CAMERA FIX — skip R3F pointer events during pointer lock ▓▒░
+    // R3F raycaster events corrupt PointerLockControls' delta tracking,
+    // causing sudden 20-90° camera snaps. Guard against this.
+    if (document.pointerLockElement) return
     const point = e.point as THREE.Vector3
     setHoverPos([point.x, 0, point.z])
   }, [])
@@ -862,12 +874,17 @@ function ConjurePreviewEffect() {
 
   if (!conjurePreview) return null
 
+  // Resolve 'random' to a concrete type for the preview
+  const previewVfx = conjurePreview.type === 'random'
+    ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
+    : conjurePreview.type
+
   return (
     <ConjureVFX
       position={[0, 0, 0]}
       prompt="preview spell demonstration"
       progress={progress}
-      vfxType={conjurePreview.type}
+      vfxType={previewVfx}
     />
   )
 }
@@ -881,6 +898,7 @@ function CraftingInProgressVFX() {
   const craftingInProgress = useOasisStore(s => s.craftingInProgress)
   const craftingPrompt = useOasisStore(s => s.craftingPrompt)
   const conjureVfxType = useOasisStore(s => s.conjureVfxType)
+  const allConjuredAssets = useOasisStore(s => s.conjuredAssets)
   const [progress, setProgress] = useState(0)
   const startRef = useRef(0)
 
@@ -901,12 +919,21 @@ function CraftingInProgressVFX() {
 
   if (!craftingInProgress) return null
 
+  // ░▒▓ SPAWN OFFSET — place crafting VFX next to any active conjurations, not stacked on top ▓▒░
+  const activeConjures = allConjuredAssets.filter(a => !['ready', 'failed'].includes(a.status)).length
+  const craftX = activeConjures * 4 + (activeConjures > 0 ? 4 : 0)  // offset past all active conjurations
+
+  // ░▒▓ RANDOM — pick a random VFX for each craft ▓▒░
+  const resolvedVfx = conjureVfxType === 'random'
+    ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
+    : conjureVfxType
+
   return (
     <ConjureVFX
-      position={[0, 0, 0]}
+      position={[craftX, 0, 0]}
       prompt={craftingPrompt || 'crafting...'}
       progress={progress}
-      vfxType={conjureVfxType}
+      vfxType={resolvedVfx}
     />
   )
 }
@@ -1148,15 +1175,21 @@ export function WorldObjectsRenderer() {
       })}
 
       {/* VFX for in-progress conjurations */}
-      {activeAssets.map(asset => (
-        <ConjureVFX
-          key={`vfx-${asset.id}`}
-          position={asset.position}
-          prompt={asset.prompt}
-          progress={asset.progress}
-          vfxType={conjureVfxType}
-        />
-      ))}
+      {activeAssets.map((asset, i) => {
+        // ░▒▓ RANDOM — resolve to a stable VFX type per asset (hash-seeded by index) ▓▒░
+        const resolvedVfx = conjureVfxType === 'random'
+          ? CONJURE_VFX_LIST[i % CONJURE_VFX_LIST.length]
+          : conjureVfxType
+        return (
+          <ConjureVFX
+            key={`vfx-${asset.id}`}
+            position={asset.position}
+            prompt={asset.prompt}
+            progress={asset.progress}
+            vfxType={resolvedVfx}
+          />
+        )
+      })}
 
       {/* ░▒▓ Spell preview — click a spell card to demo it at origin ▓▒░ */}
       <ConjurePreviewEffect />

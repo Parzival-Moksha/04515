@@ -47,6 +47,11 @@ export function useConjure() {
       const data = await res.json()
 
       // Add to local store immediately for instant UI feedback
+      // ░▒▓ SPAWN OFFSET — Detect active conjurations and offset new ones so VFX don't stack ▓▒░
+      const activeCount = useOasisStore.getState().conjuredAssets.filter(
+        a => !['ready', 'failed'].includes(a.status)
+      ).length
+      const spawnX = activeCount * 4  // 4 units apart along X axis
       const newAsset: ConjuredAsset = {
         id: data.id,
         prompt,
@@ -55,7 +60,7 @@ export function useConjure() {
         providerTaskId: '',
         status: 'queued' as ConjureStatus,
         progress: 0,
-        position: [0, 0, 0],              // neutral origin — VFX shows here until placed
+        position: [spawnX, 0, 0],
         scale: 1,
         rotation: [0, 0, 0],
         createdAt: new Date().toISOString(),

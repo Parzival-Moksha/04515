@@ -554,7 +554,7 @@ export class TripoClient implements ConjureProviderClient {
         original_model_task_id: sourceTaskId,
         quad: options.topology === 'quad',
         face_limit: options.targetPolycount,
-        bake: true,
+        out_format: 'glb',
       }),
     })
 

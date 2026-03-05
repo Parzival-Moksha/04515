@@ -55,8 +55,8 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: 'Meshy',
     envKey: 'MESHY_API_KEY',
     tiers: [
-      { id: 'preview', name: 'Preview', description: 'Fast untextured mesh (meshy-6)', estimatedSeconds: 30, estimatedCost: '$1', creditCost: 1 },
-      { id: 'refine', name: 'Refine', description: 'Full PBR textured model', estimatedSeconds: 120, estimatedCost: '$1', creditCost: 1 },
+      { id: 'preview', name: 'Grey', description: 'Fast untextured mesh (meshy-6)', estimatedSeconds: 30, estimatedCost: '$1', creditCost: 1 },
+      { id: 'refine', name: 'Textured', description: 'Full PBR textured model', estimatedSeconds: 120, estimatedCost: '$1', creditCost: 1 },
     ],
   },
   {
@@ -64,10 +64,10 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: 'Tripo',
     envKey: 'TRIPO_API_KEY',
     tiers: [
-      { id: 'turbo', name: 'Turbo', description: 'Blazing fast (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '$1', creditCost: 1 },
-      { id: 'draft', name: 'Draft', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '$1', creditCost: 1 },
-      { id: 'standard', name: 'Standard', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '$1', creditCost: 1 },
-      { id: 'premium', name: 'Premium', description: 'Sculpture-level detail (v3.1)', estimatedSeconds: 60, estimatedCost: '$1', creditCost: 1 },
+      { id: 'turbo', name: 'Turbo', description: 'Fastest (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '$0.50', creditCost: 0.5 },
+      { id: 'draft', name: 'v2.0', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '$0.50', creditCost: 0.5 },
+      { id: 'standard', name: 'v2.5', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '$0.50', creditCost: 0.5 },
+      { id: 'premium', name: 'v3.1', description: 'Latest, best detail (v3.1)', estimatedSeconds: 60, estimatedCost: '$0.50', creditCost: 0.5 },
     ],
   },
 ]
@@ -78,9 +78,10 @@ export const PROVIDERS: ProviderDefinition[] = [
 
 export const POST_PROCESS_COSTS: Record<string, number> = {
   texture: 1,
-  remesh: 1,
-  rig: 1,
-  animate: 1,
+  remesh: 0.5,
+  rig: 0.5,
+  animate: 0.5,
+  craft: 0.05,
 }
 
 // New users get this many free credits to try the Forge

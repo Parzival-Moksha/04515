@@ -431,10 +431,11 @@ async function runAutoAnimatePipeline(
     const client = new MeshyClient()
     const conjuredDir = ensureConjuredDir()
 
-    // Download all available free animations (walk + run)
+    // ░▒▓ CONSOLIDATION — only download walk animation to reduce asset clutter ▓▒░
+    // Previously downloaded both walk + run as separate assets (4 total per character).
+    // For beta, just the walking model is enough. Run can be added later per-request.
     const freeAnims: { type: string; label: string; url: string | undefined }[] = [
       { type: 'walk', label: 'Walking', url: rigResult?.walkAnimUrl },
-      { type: 'run', label: 'Running', url: rigResult?.runAnimUrl },
     ]
 
     for (const anim of freeAnims) {

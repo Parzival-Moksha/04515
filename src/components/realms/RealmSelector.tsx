@@ -225,6 +225,14 @@ export function RealmSelector() {
                     )}
                   </button>
                 )}
+                {/* Rename button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRenamingId(world.id); setRenameValue(world.name) }}
+                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 px-1.5 py-1 text-xs transition-opacity"
+                  title="Rename world"
+                >
+                  ✏️
+                </button>
                 {/* Visibility toggle */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleVisibility(world.id) }}

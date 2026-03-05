@@ -8,6 +8,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { CraftedScene, CraftedPrimitive, PrimitiveType } from '../../../lib/conjure/types'
+import { POST_PROCESS_COSTS } from '../../../lib/conjure/types'
+import { auth } from '../../../lib/auth'
+import { getServerSupabase } from '../../../lib/supabase'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LLM SYSTEM PROMPT — teach the model to think in primitives
@@ -159,6 +162,20 @@ export async function POST(request: NextRequest) {
     }
     if (prompt.length > 2000) {
       return NextResponse.json({ error: 'Prompt too long (2000 char max)' }, { status: 400 })
+    }
+
+    // ░▒▓ CREDIT CHECK — crafting costs a fraction of a credit ▓▒░
+    const creditCost = POST_PROCESS_COSTS.craft ?? 0.05
+    const session = await auth()
+    if (session?.user?.id) {
+      const sb = getServerSupabase()
+      const { data: profile } = await sb.from('profiles').select('credits').eq('id', session.user.id).single()
+      const currentCredits = profile?.credits ?? 0
+      if (currentCredits < creditCost) {
+        return NextResponse.json({ error: 'Insufficient credits', credits: currentCredits, required: creditCost }, { status: 402 })
+      }
+      // Deduct (fire-and-forget — craft is cheap, don't block on it)
+      sb.from('profiles').update({ credits: Math.round((currentCredits - creditCost) * 100) / 100 }).eq('id', session.user.id).gte('credits', creditCost).then(() => {})
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY
