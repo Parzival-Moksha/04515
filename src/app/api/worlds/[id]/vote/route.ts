@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
-import { XP_AWARDS } from '@/lib/xp'
+import { XP_AWARDS, levelFromXp } from '@/lib/xp'
 
 export async function POST(
   _req: NextRequest,
@@ -85,11 +85,13 @@ export async function POST(
       if (ownerProfile) {
         const newAura = (ownerProfile.aura || 0) + 1
         const newXp = (ownerProfile.xp || 0) + XP_AWARDS.WORLD_UPVOTED
+        const newLevel = levelFromXp(newXp)
         await sb
           .from('profiles')
           .update({
             aura: newAura,
             xp: newXp,
+            level: newLevel,
             updated_at: new Date().toISOString(),
           })
           .eq('id', world.user_id)
@@ -119,10 +121,12 @@ export async function POST(
         .single()
 
       if (voterProfile) {
+        const voterNewXp = (voterProfile.xp || 0) + XP_AWARDS.UPVOTE_WORLD
         await sb
           .from('profiles')
           .update({
-            xp: (voterProfile.xp || 0) + XP_AWARDS.UPVOTE_WORLD,
+            xp: voterNewXp,
+            level: levelFromXp(voterNewXp),
             updated_at: new Date().toISOString(),
           })
           .eq('id', userId)

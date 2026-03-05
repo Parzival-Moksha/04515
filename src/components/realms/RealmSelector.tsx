@@ -20,14 +20,18 @@ export function RealmSelector() {
   const [showNewWorld, setShowNewWorld] = useState(false)
   const [newName, setNewName] = useState('')
   const [newIcon, setNewIcon] = useState('🌍')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
 
   const activeWorldId = useOasisStore(s => s.activeWorldId)
   const worldRegistry = useOasisStore(s => s.worldRegistry)
   const switchWorld = useOasisStore(s => s.switchWorld)
   const createNewWorld = useOasisStore(s => s.createNewWorld)
   const deleteWorldById = useOasisStore(s => s.deleteWorldById)
+  const refreshWorldRegistry = useOasisStore(s => s.refreshWorldRegistry)
 
   // Visibility state (cached locally, synced from worldRegistry.visibility)
   const [visibilityMap, setVisibilityMap] = useState<Record<string, WorldVisibility>>({})
@@ -78,6 +82,28 @@ export function RealmSelector() {
       nameInputRef.current.focus()
     }
   }, [showNewWorld])
+
+  // Focus rename input when it opens
+  useEffect(() => {
+    if (renamingId && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [renamingId])
+
+  const handleRename = useCallback(async (worldId: string) => {
+    const name = renameValue.trim()
+    if (!name) { setRenamingId(null); return }
+    try {
+      await fetch(`/api/worlds/${worldId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      refreshWorldRegistry()
+    } catch { /* silent */ }
+    setRenamingId(null)
+  }, [renameValue, refreshWorldRegistry])
 
   const handleCreateWorld = () => {
     const name = newName.trim()
@@ -143,35 +169,62 @@ export function RealmSelector() {
             overflowY: 'auto',
           }}
         >
+          {/* Explore link */}
+          <button
+            onClick={() => { window.open('/explore', '_blank'); setExpanded(false) }}
+            className="w-full px-4 py-2.5 flex items-center gap-2 text-sm text-purple-400 hover:bg-purple-500/10 transition-colors border-b border-white/5"
+          >
+            <span>🌐</span>
+            <span>Explore Worlds</span>
+          </button>
+
           <div className="px-4 py-2">
-            <span className="text-[10px] text-gray-600 uppercase tracking-wider">Forge Worlds</span>
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider">Your Worlds</span>
           </div>
 
           {/* FORGE WORLDS from registry */}
           {worldRegistry.map(world => {
             const isActive = activeWorldId === world.id
+            const isRenaming = renamingId === world.id
             return (
               <div key={world.id} className="group flex items-center">
-                <button
-                  onClick={() => { switchWorld(world.id); setExpanded(false) }}
-                  className="flex-1 flex items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/5"
-                  style={{
-                    borderLeft: isActive ? '3px solid #F97316' : '3px solid transparent',
-                  }}
-                >
-                  <span className="text-lg">{world.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate" style={{ color: isActive ? '#F97316' : '#ccc' }}>
-                      {world.name}
-                    </div>
-                    <div className="text-[10px] text-gray-600">
-                      {new Date(world.lastSavedAt).toLocaleDateString()}
-                    </div>
+                {isRenaming ? (
+                  <div className="flex-1 flex items-center gap-2 px-4 py-2">
+                    <span className="text-lg">{world.icon}</span>
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRename(world.id); if (e.key === 'Escape') setRenamingId(null) }}
+                      onBlur={() => handleRename(world.id)}
+                      className="flex-1 bg-black/50 border border-orange-500/40 rounded px-2 py-1 text-sm text-white focus:outline-none"
+                    />
                   </div>
-                  {isActive && (
-                    <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#F97316' }} />
-                  )}
-                </button>
+                ) : (
+                  <button
+                    onClick={() => { switchWorld(world.id); setExpanded(false) }}
+                    onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(world.id); setRenameValue(world.name) }}
+                    className="flex-1 flex items-center gap-3 px-4 py-3 text-left transition-all duration-150 hover:bg-white/5"
+                    style={{
+                      borderLeft: isActive ? '3px solid #F97316' : '3px solid transparent',
+                    }}
+                    title="Double-click to rename"
+                  >
+                    <span className="text-lg">{world.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate" style={{ color: isActive ? '#F97316' : '#ccc' }}>
+                        {world.name}
+                      </div>
+                      <div className="text-[10px] text-gray-600">
+                        {new Date(world.lastSavedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    {isActive && (
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#F97316' }} />
+                    )}
+                  </button>
+                )}
                 {/* Visibility toggle */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleVisibility(world.id) }}

@@ -10,6 +10,7 @@ import { useState, useRef, useEffect, useContext, useCallback } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { SettingsContext } from '../scene-lib'
 import { FREE_CREDITS, CREDIT_PACKS } from '@/lib/conjure/types'
+import { XP_AWARDS } from '@/lib/xp'
 
 interface ProfileData {
   credits: number
@@ -23,11 +24,22 @@ interface ProfileData {
   xpToNext: number
 }
 
+const XP_ACTION_LABELS = [
+  { label: 'Place object', xp: XP_AWARDS.PLACE_CATALOG_OBJECT },
+  { label: 'Conjure asset', xp: XP_AWARDS.CONJURE_ASSET },
+  { label: 'Craft scene', xp: XP_AWARDS.CRAFT_SCENE },
+  { label: 'Add light', xp: XP_AWARDS.ADD_LIGHT },
+  { label: 'Set world public', xp: XP_AWARDS.SET_WORLD_PUBLIC },
+  { label: 'World upvoted', xp: XP_AWARDS.WORLD_UPVOTED },
+  { label: 'Daily login', xp: XP_AWARDS.DAILY_LOGIN },
+]
+
 export function ProfileButton() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100 })
   const [showPacks, setShowPacks] = useState(false)
+  const [showXpInfo, setShowXpInfo] = useState(false)
   const [buying, setBuying] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const { settings } = useContext(SettingsContext)
@@ -165,14 +177,35 @@ export function ProfileButton() {
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Credits</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-orange-400">{profile.xp}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">XP</p>
+                <p className="text-lg font-bold text-orange-400">{profile.level}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Level</p>
               </div>
               <div>
                 <p className="text-lg font-bold text-pink-400">{profile.aura}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Aura</p>
               </div>
             </div>
+          </div>
+
+          {/* XP Actions — collapsible */}
+          <div className="px-4 py-2 border-b border-white/10">
+            <button
+              onClick={() => setShowXpInfo(!showXpInfo)}
+              className="w-full flex items-center justify-between text-[10px] text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+            >
+              <span className="uppercase tracking-wider">XP Guide</span>
+              <span>{showXpInfo ? '▲' : '▼'}</span>
+            </button>
+            {showXpInfo && (
+              <div className="mt-2 space-y-0.5 text-[10px]">
+                {XP_ACTION_LABELS.map(({ label, xp }) => (
+                  <div key={label} className="flex justify-between">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="text-purple-400 font-mono">+{xp}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Buy Credits */}

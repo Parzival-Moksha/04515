@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
 import { FREE_CREDITS } from '@/lib/conjure/types'
-import { getLevelTitle, levelProgress, xpToNextLevel } from '@/lib/xp'
+import { getLevelTitle, levelProgress, xpToNextLevel, levelFromXp } from '@/lib/xp'
 
 export async function GET() {
   try {
@@ -30,12 +30,23 @@ export async function GET() {
       })
     }
 
-    const level = data.level || 1
     const xp = data.xp || 0
+    // Always recalculate level from XP (self-healing if DB is stale)
+    const level = levelFromXp(xp)
     const title = getLevelTitle(level)
+
+    // Fix stale level in DB if needed
+    if (level !== (data.level || 1)) {
+      getServerSupabase()
+        .from('profiles')
+        .update({ level })
+        .eq('id', session.user.id)
+        .then(() => {})
+    }
 
     return NextResponse.json({
       ...data,
+      level,
       aura: data.aura || 0,
       levelTitle: title.title,
       levelBadge: title.badge,

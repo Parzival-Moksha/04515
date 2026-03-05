@@ -459,6 +459,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
     })
     get().spawnPlacementVfx(position)
     setTimeout(() => get().saveWorldState(), 100)
+    awardXp('PLACE_CATALOG_OBJECT', get().activeWorldId)
   },
 
   placeLibrarySceneAt: (sceneId, position) => {

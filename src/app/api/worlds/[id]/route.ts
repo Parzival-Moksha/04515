@@ -4,6 +4,7 @@
 //
 //   GET    /api/worlds/[id]  — Load world state
 //   PUT    /api/worlds/[id]  — Save world state (debounced on client)
+//   PATCH  /api/worlds/[id]  — Update world metadata (name, icon)
 //   DELETE /api/worlds/[id]  — Delete world
 //
 // ░▒▓█ WORLD [ID] ROUTE █▓▒░
@@ -11,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getServerSupabase } from '@/lib/supabase'
 import {
   loadWorld, saveWorld, deleteWorld, getRegistry, updateObjectCount,
   type WorldState,
@@ -70,6 +72,45 @@ export async function PUT(request: Request, context: RouteContext) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[Worlds] PUT [id] error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PATCH /api/worlds/[id] — Update world metadata (name, icon)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function PATCH(request: Request, context: RouteContext) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await context.params
+    const body = await request.json() as { name?: string; icon?: string }
+
+    const updates: Record<string, string> = {}
+    if (body.name?.trim()) updates.name = body.name.trim().slice(0, 50)
+    if (body.icon) updates.icon = body.icon
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
+
+    const sb = getServerSupabase()
+    const { error } = await sb
+      .from('worlds')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) throw error
+
+    return NextResponse.json({ ok: true, ...updates })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[Worlds] PATCH [id] error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
