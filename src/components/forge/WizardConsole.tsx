@@ -18,6 +18,7 @@ import { GROUND_PRESETS, getTextureUrls } from '../../lib/forge/ground-textures'
 import { ASSET_CATALOG, SKY_BACKGROUNDS } from '../scene-lib/constants'
 import { SettingsContext } from '../scene-lib/contexts'
 import type { AssetDefinition } from '../scene-lib/types'
+import { awardXp } from '../../hooks/useXp'
 import { ModelPreviewPanel, CraftedPreviewPanel } from './ModelPreview'
 import { generateSingleCraftedThumbnail, useCraftedThumbnailGenerator, useCatalogThumbnailGenerator } from '../../hooks/useThumbnailGenerator'
 
@@ -738,6 +739,8 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         addCraftedScene(data.scene as CraftedScene)
         // ░▒▓ Fire-and-forget thumbnail — darkroom develops the portrait in the background ▓▒░
         generateSingleCraftedThumbnail(data.scene as CraftedScene).catch(() => {})
+        // ░▒▓ XP — crafting is creation ▓▒░
+        awardXp('CRAFT_SCENE', useOasisStore.getState().activeWorldId)
         // Track conversation for iterative mode
         setCraftHistory(prev => [
           ...prev,

@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react'
 import { useOasisStore } from '../store/oasisStore'
+import { awardXp } from '../hooks/useXp'
 import type { ConjuredAsset, ProviderName, ConjureStatus, PostProcessAction, MeshTopology, CharacterGenerationOptions } from '../lib/conjure/types'
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
@@ -62,6 +63,10 @@ export function useConjure() {
       addConjuredAsset(newAsset)
       // Auto-place in current world
       placeConjuredAssetInWorld(data.id)
+
+      // Award XP for conjuration (fire-and-forget)
+      const worldId = useOasisStore.getState().activeWorldId
+      awardXp('CONJURE_ASSET', worldId)
 
       return data
     } catch (err) {

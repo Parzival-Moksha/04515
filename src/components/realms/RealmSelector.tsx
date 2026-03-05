@@ -6,10 +6,13 @@
 // +New World creates a new empty forge world and drops you in
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useOasisStore } from '../../store/oasisStore'
+import type { WorldVisibility } from '@/lib/xp'
 
 const WORLD_ICONS = ['🌍', '🌋', '🏔️', '🌊', '🏜️', '🌌', '🪐', '🌙', '🏰', '⛩️']
+const VISIBILITY_ICONS: Record<WorldVisibility, string> = { private: '🔒', public: '🌐', unlisted: '🔗' }
+const VISIBILITY_CYCLE: WorldVisibility[] = ['private', 'public', 'unlisted']
 
 export function RealmSelector() {
   const [expanded, setExpanded] = useState(false)
@@ -25,6 +28,34 @@ export function RealmSelector() {
   const switchWorld = useOasisStore(s => s.switchWorld)
   const createNewWorld = useOasisStore(s => s.createNewWorld)
   const deleteWorldById = useOasisStore(s => s.deleteWorldById)
+
+  // Visibility state (cached locally, synced from worldRegistry.visibility)
+  const [visibilityMap, setVisibilityMap] = useState<Record<string, WorldVisibility>>({})
+
+  // Seed visibility from registry
+  useEffect(() => {
+    const map: Record<string, WorldVisibility> = {}
+    for (const w of worldRegistry) map[w.id] = w.visibility || 'private'
+    setVisibilityMap(map)
+  }, [worldRegistry])
+
+  const toggleVisibility = useCallback(async (worldId: string) => {
+    const current = visibilityMap[worldId] || 'private'
+    const nextIdx = (VISIBILITY_CYCLE.indexOf(current) + 1) % VISIBILITY_CYCLE.length
+    const next = VISIBILITY_CYCLE[nextIdx]
+    // Optimistic update
+    setVisibilityMap(prev => ({ ...prev, [worldId]: next }))
+    try {
+      await fetch(`/api/worlds/${worldId}/visibility`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility: next }),
+      })
+    } catch {
+      // Revert on failure
+      setVisibilityMap(prev => ({ ...prev, [worldId]: current }))
+    }
+  }, [visibilityMap])
 
   useEffect(() => setMounted(true), [])
 
@@ -140,6 +171,14 @@ export function RealmSelector() {
                   {isActive && (
                     <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#F97316' }} />
                   )}
+                </button>
+                {/* Visibility toggle */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleVisibility(world.id) }}
+                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 px-1.5 py-1 text-xs transition-opacity"
+                  title={`${visibilityMap[world.id] || 'private'} — click to change`}
+                >
+                  {VISIBILITY_ICONS[visibilityMap[world.id] || 'private']}
                 </button>
                 {/* Delete button (not for default world) */}
                 {worldRegistry.length > 1 && (

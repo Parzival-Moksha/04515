@@ -15,13 +15,18 @@ interface ProfileData {
   credits: number
   xp: number
   level: number
+  aura: number
   wallet_address: string | null
+  levelTitle: string
+  levelBadge: string
+  levelProgress: number
+  xpToNext: number
 }
 
 export function ProfileButton() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
-  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, wallet_address: null })
+  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100 })
   const [showPacks, setShowPacks] = useState(false)
   const [buying, setBuying] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -135,18 +140,37 @@ export function ProfileButton() {
 
           {/* Stats */}
           <div className="p-4 border-b border-white/10">
+            {/* Level title + badge */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-purple-400 font-bold tracking-wider">
+                {profile.levelBadge} Lv.{profile.level} {profile.levelTitle}
+              </span>
+              <span className="text-xs text-gray-600">
+                {profile.xp} / {profile.xp + (profile.xpToNext - Math.round(profile.levelProgress * profile.xpToNext))} XP
+              </span>
+            </div>
+            {/* XP progress bar */}
+            <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.max(2, profile.levelProgress * 100)}%`,
+                  background: 'linear-gradient(90deg, #7C3AED, #A855F7)',
+                }}
+              />
+            </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-lg font-bold text-purple-400">{profile.level}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Level</p>
+                <p className="text-lg font-bold text-green-400">{profile.credits}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Credits</p>
               </div>
               <div>
                 <p className="text-lg font-bold text-orange-400">{profile.xp}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">XP</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-green-400">{profile.credits}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Credits</p>
+                <p className="text-lg font-bold text-pink-400">{profile.aura}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Aura</p>
               </div>
             </div>
           </div>
@@ -191,6 +215,12 @@ export function ProfileButton() {
 
           {/* Menu items */}
           <div className="p-2">
+            <button
+              onClick={() => { window.open('/explore', '_blank'); setIsOpen(false) }}
+              className="w-full text-left px-3 py-2 rounded text-sm text-purple-300 hover:bg-purple-500/10 transition-colors cursor-pointer"
+            >
+              🌐 Explore Worlds
+            </button>
             <button
               disabled
               className="w-full text-left px-3 py-2 rounded text-sm text-gray-500 cursor-not-allowed"

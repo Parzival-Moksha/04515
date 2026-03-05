@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import {
-  loadWorld, saveWorld, deleteWorld, getRegistry,
+  loadWorld, saveWorld, deleteWorld, getRegistry, updateObjectCount,
   type WorldState,
 } from '@/lib/forge/world-server'
 
@@ -57,7 +57,14 @@ export async function PUT(request: Request, context: RouteContext) {
     const { id } = await context.params
     const body = await request.json()
 
-    await saveWorld(id, session.user.id, body as Omit<WorldState, 'version' | 'savedAt'>)
+    const state = body as Omit<WorldState, 'version' | 'savedAt'>
+    await saveWorld(id, session.user.id, state)
+
+    // Sync object count for explorer cards (fire-and-forget)
+    const objectCount = (state.conjuredAssetIds?.length || 0)
+      + (state.catalogPlacements?.length || 0)
+      + (state.craftedScenes?.length || 0)
+    updateObjectCount(id, session.user.id, objectCount).catch(() => {})
 
     return NextResponse.json({ ok: true, savedAt: new Date().toISOString() })
   } catch (err) {

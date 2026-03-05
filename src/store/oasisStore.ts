@@ -15,6 +15,7 @@ import {
   type WorldMeta,
 } from '../lib/forge/world-persistence'
 import { addToSceneLibrary, getSceneLibrary, removeFromSceneLibrary } from '../lib/forge/scene-library'
+import { awardXp } from '../hooks/useXp'
 
 // ─═̷─═̷─🏗️ SSR-SAFE LOCALSTORAGE ─═̷─═̷─🏗️
 // Next.js pre-renders on the server where `window` doesn't exist.
@@ -398,6 +399,8 @@ export const useOasisStore = create<OasisState>((set, get) => {
       }))
     })
     setTimeout(() => get().saveWorldState(), 100)
+    // XP for placing objects
+    awardXp('PLACE_CATALOG_OBJECT', get().activeWorldId)
   },
   removeCatalogAsset: (id) => {
     const asset = get().placedCatalogAssets.find(a => a.id === id)
@@ -657,6 +660,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
       set(s => ({ worldLights: [...s.worldLights, light] }))
     })
     setTimeout(() => get().saveWorldState(), 100)
+    awardXp('ADD_LIGHT', get().activeWorldId)
   },
   removeWorldLight: (id) => {
     withUndo('Remove light', '🗑️', () => {

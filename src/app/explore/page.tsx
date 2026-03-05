@@ -5,9 +5,10 @@
 // ─═̷─═̷─ॐ─═̷─═̷─ The gateway to the community ─═̷─═̷─ॐ─═̷─═̷─
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import type { ExploreWorld } from '@/app/api/explore/route'
 
 type SortMode = 'hot' | 'new' | 'top'
@@ -18,16 +19,27 @@ const API_BASE = typeof window !== 'undefined'
 
 export default function ExplorePage() {
   const router = useRouter()
+  const { data: session } = useSession()
   const [worlds, setWorlds] = useState<ExploreWorld[]>([])
   const [sort, setSort] = useState<SortMode>('hot')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [votingId, setVotingId] = useState<string | null>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounce search input (400ms)
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [search])
 
   const fetchWorlds = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort })
-      if (search) params.set('q', search)
+      if (debouncedSearch) params.set('q', debouncedSearch)
       const res = await fetch(`${API_BASE}?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -38,11 +50,17 @@ export default function ExplorePage() {
     } finally {
       setLoading(false)
     }
-  }, [sort, search])
+  }, [sort, debouncedSearch])
 
   useEffect(() => { fetchWorlds() }, [fetchWorlds])
 
   const handleVote = async (worldId: string) => {
+    if (!session?.user) {
+      router.push('/login')
+      return
+    }
+    if (votingId) return // prevent double-click
+    setVotingId(worldId)
     try {
       const res = await fetch(`/api/worlds/${worldId}/vote`, { method: 'POST' })
       if (res.ok) {
@@ -55,6 +73,18 @@ export default function ExplorePage() {
       }
     } catch (err) {
       console.error('[Explore] vote error:', err)
+    } finally {
+      setVotingId(null)
+    }
+  }
+
+  const handleWorldClick = (world: ExploreWorld) => {
+    if (session?.user?.id === world.user_id) {
+      // Own world — go to forge and switch to it
+      router.push(`/?world=${world.id}`)
+    } else {
+      // Other user's world — go to forge in view mode
+      router.push(`/?view=${world.id}`)
     }
   }
 
@@ -72,12 +102,29 @@ export default function ExplorePage() {
               EXPLORE WORLDS
             </h1>
           </div>
-          <button
-            onClick={() => router.push('/')}
-            className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
-          >
-            Enter the Oasis
-          </button>
+          <div className="flex items-center gap-3">
+            {session?.user ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                {session.user.image && (
+                  <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                )}
+                <span className="hidden sm:inline">{session.user.name}</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => router.push('/login')}
+                className="px-3 py-1.5 text-sm text-purple-400 border border-purple-500/30 rounded hover:bg-purple-600/20 transition-colors"
+              >
+                Sign In
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
+            >
+              Enter the Oasis
+            </button>
+          </div>
         </div>
       </header>
 
@@ -133,12 +180,10 @@ export default function ExplorePage() {
               <WorldCard
                 key={world.id}
                 world={world}
+                isOwn={session?.user?.id === world.user_id}
                 onVote={() => handleVote(world.id)}
-                onClick={() => {
-                  // TODO: Open world in read-only viewer mode
-                  // For now, just show the world name
-                  console.log('[Explore] View world:', world.id)
-                }}
+                voting={votingId === world.id}
+                onClick={() => handleWorldClick(world)}
               />
             ))}
           </div>
@@ -159,16 +204,22 @@ export default function ExplorePage() {
 
 function WorldCard({
   world,
+  isOwn,
   onVote,
+  voting,
   onClick,
 }: {
   world: ExploreWorld
+  isOwn: boolean
   onVote: () => void
+  voting: boolean
   onClick: () => void
 }) {
   return (
     <div
-      className="group border border-gray-800 rounded-lg overflow-hidden bg-gray-950 hover:border-gray-600 transition-all cursor-pointer"
+      className={`group border rounded-lg overflow-hidden bg-gray-950 hover:border-gray-600 transition-all cursor-pointer ${
+        isOwn ? 'border-orange-500/30' : 'border-gray-800'
+      }`}
       onClick={onClick}
     >
       {/* Thumbnail */}
@@ -180,12 +231,21 @@ function WorldCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          <span className="text-4xl">{world.icon}</span>
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-5xl">{world.icon}</span>
+            <span className="text-xs text-gray-700 font-mono">{world.object_count} objects</span>
+          </div>
         )}
         {/* Visit count overlay */}
         <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded text-xs text-gray-300">
           👁 {world.visit_count}
         </div>
+        {/* Own world badge */}
+        {isOwn && (
+          <div className="absolute top-2 left-2 bg-orange-500/80 px-2 py-0.5 rounded text-xs text-white font-bold">
+            YOUR WORLD
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -209,18 +269,27 @@ function WorldCard({
             </div>
           </div>
 
-          {/* Upvote button */}
-          <button
-            onClick={e => { e.stopPropagation(); onVote() }}
-            className={`flex flex-col items-center px-2 py-1 rounded transition-colors ${
-              world.user_voted
-                ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
-                : 'bg-gray-900 text-gray-400 hover:text-purple-400 border border-transparent hover:border-purple-500/30'
-            }`}
-          >
-            <span className="text-sm">▲</span>
-            <span className="text-xs font-mono">{world.upvotes}</span>
-          </button>
+          {/* Upvote button — don't show on own worlds */}
+          {!isOwn && (
+            <button
+              onClick={e => { e.stopPropagation(); onVote() }}
+              disabled={voting}
+              className={`flex flex-col items-center px-2 py-1 rounded transition-colors ${
+                world.user_voted
+                  ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
+                  : 'bg-gray-900 text-gray-400 hover:text-purple-400 border border-transparent hover:border-purple-500/30'
+              } ${voting ? 'opacity-50' : ''}`}
+            >
+              <span className="text-sm">{world.user_voted ? '▲' : '△'}</span>
+              <span className="text-xs font-mono">{world.upvotes}</span>
+            </button>
+          )}
+          {isOwn && world.upvotes > 0 && (
+            <div className="flex flex-col items-center px-2 py-1 text-purple-400/60">
+              <span className="text-sm">▲</span>
+              <span className="text-xs font-mono">{world.upvotes}</span>
+            </div>
+          )}
         </div>
 
         {/* Stats row */}
