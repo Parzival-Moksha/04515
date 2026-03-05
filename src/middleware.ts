@@ -6,8 +6,8 @@
 export { auth as middleware } from '@/lib/auth'
 
 export const config = {
-  // Protect everything EXCEPT: login page, auth API, static files, favicon, public assets
+  // Protect everything EXCEPT: login, explore, auth API, public API, static files, public assets
   matcher: [
-    '/((?!login|api/auth|api/stripe/webhook|_next/static|_next/image|favicon\\.svg|conjured/|catalog/|sky/).*)',
+    '/((?!login|explore|api/auth|api/explore|api/stripe/webhook|_next/static|_next/image|favicon\\.svg|conjured/|catalog/|sky/).*)',
   ],
 }

@@ -29,6 +29,7 @@ function toWorldMeta(row: Record<string, unknown>): WorldMeta {
     id: row.id as string,
     name: row.name as string,
     icon: (row.icon as string) || '🌍',
+    visibility: (row.visibility as 'private' | 'public' | 'unlisted') || 'private',
     createdAt: row.created_at as string,
     lastSavedAt: row.updated_at as string,
   }
@@ -41,7 +42,7 @@ function toWorldMeta(row: Record<string, unknown>): WorldMeta {
 export async function getRegistry(userId: string): Promise<WorldMeta[]> {
   const { data, error } = await sb()
     .from('worlds')
-    .select('id, name, icon, created_at, updated_at')
+    .select('id, name, icon, visibility, created_at, updated_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
 
@@ -141,7 +142,7 @@ export async function createWorld(name: string, icon = '🌍', userId: string): 
   }
 
   console.log(`[WorldServer] Created world "${name}" (${id}) for user ${userId}`)
-  return { id, name, icon, createdAt: now, lastSavedAt: now }
+  return { id, name, icon, visibility: 'private', createdAt: now, lastSavedAt: now }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -158,6 +159,95 @@ export async function deleteWorld(id: string, userId: string): Promise<void> {
   if (error) {
     console.error(`[WorldServer] deleteWorld(${id}) error:`, error.message)
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISIBILITY — toggle public/private/unlisted
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function setWorldVisibility(
+  id: string,
+  userId: string,
+  visibility: 'private' | 'public' | 'unlisted'
+): Promise<void> {
+  const now = new Date().toISOString()
+
+  // When setting to public, cache creator info for explorer cards
+  if (visibility === 'public') {
+    const { data: profile } = await sb()
+      .from('profiles')
+      .select('name, avatar_url')
+      .eq('id', userId)
+      .single()
+
+    await sb()
+      .from('worlds')
+      .update({
+        visibility,
+        creator_name: profile?.name || 'Anonymous',
+        creator_avatar: profile?.avatar_url || null,
+        updated_at: now,
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+  } else {
+    await sb()
+      .from('worlds')
+      .update({ visibility, updated_at: now })
+      .eq('id', id)
+      .eq('user_id', userId)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISIT — increment visit counter (for explore)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function recordVisit(worldId: string): Promise<void> {
+  const { data } = await sb()
+    .from('worlds')
+    .select('visit_count')
+    .eq('id', worldId)
+    .single()
+
+  if (data) {
+    await sb()
+      .from('worlds')
+      .update({ visit_count: (data.visit_count || 0) + 1 })
+      .eq('id', worldId)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAD PUBLIC — load a world without user_id check (for explore)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function loadPublicWorld(id: string): Promise<{ state: WorldState; meta: WorldMeta } | null> {
+  const { data, error } = await sb()
+    .from('worlds')
+    .select('id, name, icon, visibility, data, user_id, created_at, updated_at')
+    .eq('id', id)
+    .in('visibility', ['public', 'unlisted'])
+    .single()
+
+  if (error || !data?.data) return null
+
+  return {
+    state: data.data as WorldState,
+    meta: toWorldMeta(data),
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UPDATE OBJECT COUNT — cache for explorer cards
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function updateObjectCount(id: string, userId: string, count: number): Promise<void> {
+  await sb()
+    .from('worlds')
+    .update({ object_count: count })
+    .eq('id', id)
+    .eq('user_id', userId)
 }
 
 // ▓▓▓▓【W̸O̸R̸L̸D̸】▓▓▓▓ॐ▓▓▓▓【S̸E̸R̸V̸E̸R̸】▓▓▓▓

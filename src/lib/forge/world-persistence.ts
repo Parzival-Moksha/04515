@@ -52,6 +52,7 @@ export interface WorldMeta {
   id: string
   name: string
   icon: string          // emoji icon for the world
+  visibility: 'private' | 'public' | 'unlisted'
   createdAt: string
   lastSavedAt: string
 }
