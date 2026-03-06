@@ -12,6 +12,14 @@ import { POST_PROCESS_COSTS } from '../../../lib/conjure/types'
 import { auth } from '../../../lib/auth'
 import { getServerSupabase } from '../../../lib/supabase'
 
+const ALLOWED_MODELS = [
+  'anthropic/claude-sonnet-4-6',
+  'anthropic/claude-haiku-4-5',
+  'z-ai/glm-5',
+  'moonshotai/kimi-k2.5',
+]
+const DEFAULT_MODEL = 'moonshotai/kimi-k2.5'
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LLM SYSTEM PROMPT — teach the model to think in primitives
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -196,7 +204,7 @@ export async function POST(request: NextRequest) {
         'X-Title': 'Oasis Craft',
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-sonnet-4-6',
+        model: (typeof requestedModel === 'string' && ALLOWED_MODELS.includes(requestedModel)) ? requestedModel : DEFAULT_MODEL,
         messages: [
           { role: 'system', content: CRAFT_SYSTEM_PROMPT },
           { role: 'user', content: `Design a 3D scene for: ${prompt.trim()}` },

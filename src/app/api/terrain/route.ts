@@ -8,6 +8,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { TerrainParams } from '../../../lib/forge/terrain-generator'
 
+const ALLOWED_MODELS = [
+  'anthropic/claude-sonnet-4-6',
+  'anthropic/claude-haiku-4-5',
+  'z-ai/glm-5',
+  'moonshotai/kimi-k2.5',
+]
+const DEFAULT_MODEL = 'moonshotai/kimi-k2.5'
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT — teach the model to think in terrain parameters
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -128,7 +136,7 @@ export async function POST(request: NextRequest) {
         'X-Title': 'Oasis Terrain',
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-sonnet-4-6',
+        model: (typeof requestedModel === 'string' && ALLOWED_MODELS.includes(requestedModel)) ? requestedModel : DEFAULT_MODEL,
         messages: [
           { role: 'system', content: TERRAIN_SYSTEM_PROMPT },
           { role: 'user', content: `Design terrain parameters for: ${prompt.trim()}` },
