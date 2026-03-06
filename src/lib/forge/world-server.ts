@@ -176,7 +176,7 @@ export async function setWorldVisibility(
   if (visibility === 'public') {
     const { data: profile } = await sb()
       .from('profiles')
-      .select('name, avatar_url')
+      .select('display_name, name, avatar_url')
       .eq('id', userId)
       .single()
 
@@ -184,7 +184,7 @@ export async function setWorldVisibility(
       .from('worlds')
       .update({
         visibility,
-        creator_name: profile?.name || 'Anonymous',
+        creator_name: profile?.display_name || profile?.name || 'Anonymous',
         creator_avatar: profile?.avatar_url || null,
         updated_at: now,
       })

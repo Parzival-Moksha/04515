@@ -39,6 +39,9 @@ import { WizardConsole } from './forge/WizardConsole'
 import { ObjectInspector } from './forge/ObjectInspector'
 import { ActionLogButton, ActionLogPanel } from './forge/ActionLog'
 import { ProfileButton } from './forge/ProfileButton'
+import { OnboardingModal } from './forge/OnboardingModal'
+import { ChatPanel } from './forge/ChatPanel'
+import { FeedbackPanel } from './forge/FeedbackPanel'
 import { useWorldLoader } from './forge/WorldObjects'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -564,6 +567,8 @@ export default function Scene() {
   const [wizardOpen, setWizardOpen] = useState(true)
   // Asset Explorer removed — merged into WizardConsole
   const [actionLogOpen, setActionLogOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   const orbitControlsRef = useRef<any>(null)
 
@@ -723,6 +728,32 @@ export default function Scene() {
           onClick={() => setActionLogOpen(prev => !prev)}
           isOpen={actionLogOpen}
         />
+        <button
+          onClick={() => setChatOpen(prev => !prev)}
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+          style={{
+            background: chatOpen ? 'rgba(56,189,248,0.3)' : 'rgba(0,0,0,0.6)',
+            border: `1px solid ${chatOpen ? 'rgba(56,189,248,0.6)' : 'rgba(255,255,255,0.15)'}`,
+            color: chatOpen ? '#38BDF8' : '#aaa',
+            boxShadow: chatOpen ? '0 0 12px rgba(56,189,248,0.3)' : 'none',
+          }}
+          title="World Chat"
+        >
+          💬
+        </button>
+        <button
+          onClick={() => setFeedbackOpen(prev => !prev)}
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+          style={{
+            background: feedbackOpen ? 'rgba(249,115,22,0.3)' : 'rgba(0,0,0,0.6)',
+            border: `1px solid ${feedbackOpen ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.15)'}`,
+            color: feedbackOpen ? '#F97316' : '#aaa',
+            boxShadow: feedbackOpen ? '0 0 12px rgba(249,115,22,0.3)' : 'none',
+          }}
+          title="Anorak — Bug Reports & Feature Requests"
+        >
+          🔮
+        </button>
       </div>
 
       {/* ✨ Wizard Console */}
@@ -743,8 +774,23 @@ export default function Scene() {
         onClose={() => setActionLogOpen(false)}
       />
 
+      {/* 💬 World Chat */}
+      <ChatPanel
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
+
+      {/* 🔮 Anorak — Feedback Portal */}
+      <FeedbackPanel
+        isOpen={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+      />
+
       {/* ░▒▓ LOADING OVERLAY ▓▒░ */}
       <OasisLoader />
+
+      {/* ░▒▓ ONBOARDING — first-login identity setup ▓▒░ */}
+      <OnboardingModal />
     </DragContext.Provider>
     </SettingsContext.Provider>
   )

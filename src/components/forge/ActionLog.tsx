@@ -24,17 +24,14 @@ export function ActionLogButton({ onClick, isOpen }: { onClick: () => void; isOp
   return (
     <button
       onClick={onClick}
-      className={`relative px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all duration-200 ${
+      className={`relative w-10 h-10 rounded-lg flex items-center justify-center text-xs font-mono transition-all duration-200 hover:scale-110 ${
         isOpen
           ? 'bg-violet-500/20 border-violet-400/50 text-violet-300'
           : 'bg-black/60 border-gray-700/40 text-gray-400 hover:border-violet-500/30 hover:text-violet-300'
-      } border backdrop-blur-sm`}
+      } border`}
       title="Action Log (Ctrl+Z / Ctrl+Shift+Z)"
     >
-      <span className="mr-1">⏪</span>
-      {totalCount > 0 && (
-        <span className="text-[10px] text-violet-400/70">{undoCount}</span>
-      )}
+      <span className="text-lg">⏪</span>
     </button>
   )
 }

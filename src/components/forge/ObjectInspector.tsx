@@ -19,6 +19,7 @@ import { SettingsContext } from '../scene-lib/contexts'
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_STEP } from '../../lib/conjure/types'
 import type { MovementPreset, ObjectBehavior, AnimationConfig, ModelStats } from '../../lib/conjure/types'
 import { formatNumber, formatBytes } from './ModelPreview'
+import { ANIMATION_LIBRARY, ANIM_CATEGORIES, LIB_PREFIX, loadAnimationClip, type AnimCategory } from '../../lib/forge/animation-library'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS — The inspector's visual DNA
@@ -120,8 +121,8 @@ function PillSelector<T extends string>({ value, options, onChange, labels }: {
           onClick={() => onChange(opt)}
           className={`text-[10px] px-2 py-0.5 rounded font-mono transition-colors ${
             value === opt
-              ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40'
-              : 'text-gray-500 border border-gray-700/30 hover:text-gray-300 hover:border-gray-600/50'
+              ? 'bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-500/40'
+              : 'text-gray-300 bg-black/40 border border-gray-600/40 hover:text-white hover:border-gray-500/60'
           }`}
         >
           {labels ? labels[opt] : opt}
@@ -137,9 +138,89 @@ function PillSelector<T extends string>({ value, options, onChange, labels }: {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-mono mb-1.5 mt-3 first:mt-0">
+    <div
+      className="text-[10px] text-gray-200 uppercase tracking-wider font-mono mb-1.5 mt-3 first:mt-0 px-2 py-1 rounded"
+      style={{ background: 'rgba(30, 20, 40, 0.8)' }}
+    >
       {children}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANIMATION LIBRARY SECTION — Local Mixamo dance moves for rigged characters
+// ░▒▓ 21 animations on disk, zero API calls, infinite groove ▓▒░
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AnimationLibrarySection({ currentClipName, onSelectAnimation, onStopAnimation }: {
+  currentClipName?: string
+  onSelectAnimation: (animId: string) => void
+  onStopAnimation: () => void
+}) {
+  const [expandedCat, setExpandedCat] = useState<AnimCategory | null>('dance')
+
+  return (
+    <>
+      <SectionHeader>&#127926; Animation Library</SectionHeader>
+      <div className="rounded-lg border border-white/5 p-2 space-y-1" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
+        <div className="text-[9px] text-gray-400 font-mono mb-1">
+          21 Mixamo moves — click to play on any rigged character
+        </div>
+
+        {/* Stop button */}
+        {currentClipName?.startsWith(LIB_PREFIX) && (
+          <button
+            onClick={onStopAnimation}
+            className="w-full text-[10px] py-1 rounded border border-red-500/20 text-red-400/70 hover:text-red-300 hover:border-red-500/40 font-mono transition-colors mb-1"
+          >
+            &#9632; Stop animation
+          </button>
+        )}
+
+        {/* Category tabs */}
+        <div className="flex flex-wrap gap-1 mb-1">
+          {ANIM_CATEGORIES.map(cat => {
+            const count = ANIMATION_LIBRARY.filter(a => a.category === cat.id).length
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setExpandedCat(expandedCat === cat.id ? null : cat.id)}
+                className={`text-[9px] px-1.5 py-0.5 rounded font-mono transition-colors ${
+                  expandedCat === cat.id
+                    ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40'
+                    : 'text-gray-500 border border-gray-700/30 hover:text-gray-300'
+                }`}
+              >
+                {cat.icon} {cat.label} ({count})
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Animation buttons for expanded category */}
+        {expandedCat && (
+          <div className="grid grid-cols-2 gap-1">
+            {ANIMATION_LIBRARY.filter(a => a.category === expandedCat).map(anim => {
+              const isActive = currentClipName === `${LIB_PREFIX}${anim.id}`
+              return (
+                <button
+                  key={anim.id}
+                  onClick={() => onSelectAnimation(anim.id)}
+                  className={`text-[10px] px-2 py-1 rounded font-mono transition-colors text-left truncate ${
+                    isActive
+                      ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40'
+                      : 'text-gray-400 border border-gray-700/20 hover:text-green-300 hover:border-green-500/30 hover:bg-green-500/5'
+                  }`}
+                  title={anim.label}
+                >
+                  {isActive ? '▶ ' : ''}{anim.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -484,36 +565,36 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
             <div className="rounded-lg border border-white/5 p-2" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-500 font-mono">{'\u25B3'} Triangles</span>
+                  <span className="text-[9px] text-gray-300 font-mono">{'\u25B3'} Triangles</span>
                   <span className="text-[9px] font-mono font-medium text-fuchsia-400">{formatNumber(stats.triangles)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-500 font-mono">{'\u25CF'} Vertices</span>
+                  <span className="text-[9px] text-gray-300 font-mono">{'\u25CF'} Vertices</span>
                   <span className="text-[9px] font-mono font-medium text-fuchsia-400">{formatNumber(stats.vertices)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-500 font-mono">{'\u25A6'} Meshes</span>
+                  <span className="text-[9px] text-gray-300 font-mono">{'\u25A6'} Meshes</span>
                   <span className="text-[9px] font-mono font-medium text-fuchsia-400">{stats.meshCount}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-500 font-mono">{'\u{1F3A8}'} Materials</span>
+                  <span className="text-[9px] text-gray-300 font-mono">{'\u{1F3A8}'} Materials</span>
                   <span className="text-[9px] font-mono font-medium text-fuchsia-400">{stats.materialCount}</span>
                 </div>
                 {stats.boneCount > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-gray-500 font-mono">{'\u{1F9B4}'} Bones</span>
+                    <span className="text-[9px] text-gray-300 font-mono">{'\u{1F9B4}'} Bones</span>
                     <span className="text-[9px] font-mono font-medium text-fuchsia-400">{stats.boneCount}</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-gray-500 font-mono">{'\u{1F4D0}'} Bounds</span>
+                  <span className="text-[9px] text-gray-300 font-mono">{'\u{1F4D0}'} Bounds</span>
                   <span className="text-[9px] font-mono font-medium text-fuchsia-400">
                     {stats.dimensions.w} {'\u00D7'} {stats.dimensions.h} {'\u00D7'} {stats.dimensions.d}
                   </span>
                 </div>
                 {stats.fileSize != null && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-gray-500 font-mono">{'\u{1F4BE}'} File</span>
+                    <span className="text-[9px] text-gray-300 font-mono">{'\u{1F4BE}'} File</span>
                     <span className="text-[9px] font-mono font-medium text-fuchsia-400">{formatBytes(stats.fileSize)}</span>
                   </div>
                 )}
@@ -877,6 +958,25 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
               )}
             </div>
           </>
+        )}
+
+        {/* ░▒▓ ANIMATION LIBRARY — Local Mixamo moves for any rigged character ▓▒░ */}
+        {stats && stats.boneCount > 0 && (
+          <AnimationLibrarySection
+            currentClipName={behavior.animation?.clipName}
+            onSelectAnimation={(animId) => {
+              const clipName = `${LIB_PREFIX}${animId}`
+              // Toggle off if already playing
+              if (behavior.animation?.clipName === clipName) {
+                updateAnimation(undefined)
+              } else {
+                // Trigger load (async, ConjuredObject will pick it up)
+                loadAnimationClip(animId)
+                updateAnimation({ clipName, loop: 'repeat', speed: 1.0 })
+              }
+            }}
+            onStopAnimation={() => updateAnimation(undefined)}
+          />
         )}
 
         {/* ░▒▓ ACTIONS ▓▒░ */}

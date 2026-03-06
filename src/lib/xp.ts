@@ -34,6 +34,9 @@ export const XP_AWARDS = {
 
   // Collaboration
   CO_BUILD: 15,              // build in someone else's world
+
+  // Meta
+  SUBMIT_FEEDBACK: 10,       // Anorak: bug report or feature request
 } as const
 
 export type XpAction = keyof typeof XP_AWARDS

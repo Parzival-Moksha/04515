@@ -42,11 +42,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Check if user already exists — don't overwrite credits on re-login
         const { data: existing } = await sb.from('profiles').select('id').eq('id', userId).single()
         if (existing) {
-          // Returning user — update profile info only, preserve credits
+          // Returning user — update Google fields only
+          // DON'T overwrite avatar_url (user may have uploaded a custom one)
           await sb.from('profiles').update({
             email: user.email,
             name: user.name,
-            avatar_url: user.image,
             provider: account?.provider || 'google',
             updated_at: new Date().toISOString(),
           }).eq('id', userId)
