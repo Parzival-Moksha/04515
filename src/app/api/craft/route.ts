@@ -164,10 +164,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Prompt too long (2000 char max)' }, { status: 400 })
     }
 
-    // ░▒▓ CREDIT CHECK — crafting costs a fraction of a credit ▓▒░
+    // ░▒▓ AUTH + CREDIT CHECK — crafting costs a fraction of a credit ▓▒░
     const creditCost = POST_PROCESS_COSTS.craft ?? 0.05
     const session = await auth()
-    if (session?.user?.id) {
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    {
       const sb = getServerSupabase()
       const { data: profile } = await sb.from('profiles').select('credits').eq('id', session.user.id).single()
       const currentCredits = profile?.credits ?? 0
@@ -193,7 +196,7 @@ export async function POST(request: NextRequest) {
         'X-Title': 'Oasis Craft',
       },
       body: JSON.stringify({
-        model: (typeof requestedModel === 'string' && requestedModel) || 'anthropic/claude-sonnet-4-6',
+        model: 'anthropic/claude-sonnet-4-6',
         messages: [
           { role: 'system', content: CRAFT_SYSTEM_PROMPT },
           { role: 'user', content: `Design a 3D scene for: ${prompt.trim()}` },

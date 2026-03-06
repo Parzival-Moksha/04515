@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         'X-Title': 'Oasis Terrain',
       },
       body: JSON.stringify({
-        model: (typeof requestedModel === 'string' && requestedModel) || 'anthropic/claude-sonnet-4-6',
+        model: 'anthropic/claude-sonnet-4-6',
         messages: [
           { role: 'system', content: TERRAIN_SYSTEM_PROMPT },
           { role: 'user', content: `Design terrain parameters for: ${prompt.trim()}` },

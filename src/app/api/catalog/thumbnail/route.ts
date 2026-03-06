@@ -39,6 +39,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Missing thumbnail file or id' }, { status: 400 })
     }
 
+    // Sanitize ID to prevent path traversal
+    if (!/^[\w\-]{1,80}$/.test(id)) {
+      return NextResponse.json({ error: 'Invalid asset ID' }, { status: 400 })
+    }
+
     ensureThumbsDir()
     const destPath = join(THUMBS_DIR, `${id}.jpg`)
     const buffer = Buffer.from(await file.arrayBuffer())
@@ -46,7 +51,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ thumbnailUrl: `/thumbs/${id}.jpg` })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[Catalog] Thumbnail upload error:', err)
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 }

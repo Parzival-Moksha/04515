@@ -8,6 +8,19 @@ import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
 import { XP_AWARDS, type XpAction, levelFromXp } from '@/lib/xp'
 
+// Per-action cooldowns (seconds) — prevents XP farming
+const ACTION_COOLDOWNS: Partial<Record<XpAction, number>> = {
+  PLACE_CATALOG_OBJECT: 5,
+  CONJURE_ASSET: 30,
+  CRAFT_SCENE: 30,
+  PAINT_GROUND_BATCH: 10,
+  ADD_LIGHT: 5,
+  SUBMIT_FEEDBACK: 60,
+  VISIT_OTHER_WORLD: 30,
+  UPVOTE_WORLD: 10,
+  CO_BUILD: 10,
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -20,12 +33,32 @@ export async function POST(req: NextRequest) {
 
     // Validate action
     if (!action || !(action in XP_AWARDS)) {
-      return NextResponse.json({ error: `Unknown XP action: ${action}` }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
     const xpAmount = XP_AWARDS[action as XpAction]
     const sb = getServerSupabase()
     const userId = session.user.id
+
+    // Cooldown check — prevent rapid-fire XP farming
+    const cooldown = ACTION_COOLDOWNS[action as XpAction]
+    if (cooldown) {
+      const { data: recent } = await sb
+        .from('xp_events')
+        .select('created_at')
+        .eq('user_id', userId)
+        .eq('action', action)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (recent && recent.length > 0) {
+        const lastAward = new Date(recent[0].created_at).getTime()
+        const elapsed = (Date.now() - lastAward) / 1000
+        if (elapsed < cooldown) {
+          return NextResponse.json({ xp: 0, message: 'Cooldown active' })
+        }
+      }
+    }
 
     // Deduplicate certain one-time actions
     if (action === 'FIRST_WORLD_CREATED' || action === 'DAILY_LOGIN') {
