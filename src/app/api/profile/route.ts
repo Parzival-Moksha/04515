@@ -93,14 +93,9 @@ export async function PATCH(request: Request) {
     }
 
     if (body.avatar_3d_url !== undefined) {
-      // Validate it's a Ready Player Me URL or null (to clear)
-      const url = body.avatar_3d_url
-      if (url === null || url === '') {
+      // Only allow clearing via PATCH — saving handled by POST /api/profile/avatar3d
+      if (body.avatar_3d_url === null || body.avatar_3d_url === '') {
         updates.avatar_3d_url = null
-      } else if (typeof url === 'string' && url.startsWith('https://models.readyplayer.me/')) {
-        updates.avatar_3d_url = url.slice(0, 500)
-      } else {
-        return NextResponse.json({ error: 'Invalid avatar URL' }, { status: 400 })
       }
     }
 

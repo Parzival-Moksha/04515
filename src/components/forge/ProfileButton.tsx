@@ -131,10 +131,12 @@ export function ProfileButton() {
 
   const handleAvatarReady = useCallback(async (glbUrl: string) => {
     try {
-      await fetch('/api/profile', {
-        method: 'PATCH',
+      // Determine URL type for the dedicated avatar3d endpoint
+      const urlType = glbUrl.startsWith('data:') ? 'dataURL' : 'httpURL'
+      await fetch('/api/profile/avatar3d', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatar_3d_url: glbUrl }),
+        body: JSON.stringify({ url: glbUrl, urlType }),
       })
       setShowAvatarCreator(false)
       fetchProfile()
