@@ -8,7 +8,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { Html, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { CraftedScene, CraftedPrimitive } from '../../lib/conjure/types'
 import { useOasisStore } from '../../store/oasisStore'
@@ -35,10 +35,121 @@ export function PrimitiveGeometry({ type }: { type: CraftedPrimitive['type'] }) 
 // SINGLE PRIMITIVE — one atomic piece of a crafted scene
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Shared animation hook — applies to both mesh and text primitives
+function useAnimation(ref: React.RefObject<THREE.Object3D | null>, primitive: CraftedPrimitive) {
+  const anim = primitive.animation
+  const basePos = useRef(primitive.position)
+  const baseScale = useRef(primitive.scale)
+  const baseRot = useRef(primitive.rotation || [0, 0, 0] as [number, number, number])
+
+  useFrame((state) => {
+    if (!ref.current || !anim) return
+    const t = state.clock.elapsedTime
+    const speed = anim.speed ?? 1
+    const amp = anim.amplitude ?? 0.5
+    const axisIdx = anim.axis === 'x' ? 0 : anim.axis === 'z' ? 2 : 1
+
+    switch (anim.type) {
+      case 'rotate': {
+        const rot = [baseRot.current[0], baseRot.current[1], baseRot.current[2]]
+        rot[axisIdx] = baseRot.current[axisIdx] + t * speed
+        ref.current.rotation.set(rot[0], rot[1], rot[2])
+        break
+      }
+      case 'bob': {
+        const pos = [basePos.current[0], basePos.current[1], basePos.current[2]]
+        pos[axisIdx] = basePos.current[axisIdx] + Math.sin(t * speed * 2) * amp
+        ref.current.position.set(pos[0], pos[1], pos[2])
+        break
+      }
+      case 'pulse': {
+        const pulseFactor = 1 + Math.sin(t * speed * 3) * amp * 0.3
+        ref.current.scale.set(
+          baseScale.current[0] * pulseFactor,
+          baseScale.current[1] * pulseFactor,
+          baseScale.current[2] * pulseFactor,
+        )
+        break
+      }
+      case 'swing': {
+        const swingRot = [baseRot.current[0], baseRot.current[1], baseRot.current[2]]
+        swingRot[axisIdx] = baseRot.current[axisIdx] + Math.sin(t * speed * 2) * amp
+        ref.current.rotation.set(swingRot[0], swingRot[1], swingRot[2])
+        break
+      }
+      case 'orbit': {
+        const orbitPos = [basePos.current[0], basePos.current[1], basePos.current[2]]
+        if (axisIdx === 1) {
+          orbitPos[0] = basePos.current[0] + Math.cos(t * speed) * amp
+          orbitPos[2] = basePos.current[2] + Math.sin(t * speed) * amp
+        } else if (axisIdx === 0) {
+          orbitPos[1] = basePos.current[1] + Math.cos(t * speed) * amp
+          orbitPos[2] = basePos.current[2] + Math.sin(t * speed) * amp
+        } else {
+          orbitPos[0] = basePos.current[0] + Math.cos(t * speed) * amp
+          orbitPos[1] = basePos.current[1] + Math.sin(t * speed) * amp
+        }
+        ref.current.position.set(orbitPos[0], orbitPos[1], orbitPos[2])
+        break
+      }
+    }
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEXT PRIMITIVE — 3D SDF text via troika (drei wraps it)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function CraftedTextMesh({ primitive }: { primitive: CraftedPrimitive }) {
+  const groupRef = useRef<THREE.Group>(null)
+  useAnimation(groupRef, primitive)
+
+  return (
+    <group
+      ref={groupRef}
+      position={primitive.position}
+      rotation={primitive.rotation || [0, 0, 0]}
+      scale={primitive.scale}
+    >
+      <Text
+        fontSize={primitive.fontSize ?? 1}
+        color={primitive.color}
+        anchorX={primitive.anchorX ?? 'center'}
+        anchorY={primitive.anchorY ?? 'middle'}
+        outlineWidth={0.02}
+        outlineColor="#000000"
+        // @ts-expect-error drei Text material props
+        emissive={primitive.emissive || undefined}
+        emissiveIntensity={primitive.emissiveIntensity ?? 0}
+      >
+        {primitive.text || '?'}
+        <meshStandardMaterial
+          color={primitive.color}
+          emissive={primitive.emissive || '#000000'}
+          emissiveIntensity={primitive.emissiveIntensity ?? 0}
+          metalness={primitive.metalness ?? 0}
+          roughness={primitive.roughness ?? 0.5}
+          transparent={primitive.opacity !== undefined && primitive.opacity < 1}
+          opacity={primitive.opacity ?? 1}
+        />
+      </Text>
+    </group>
+  )
+}
+
 export function CraftedPrimitiveMesh({ primitive }: { primitive: CraftedPrimitive }) {
+  const meshRef = useRef<THREE.Mesh>(null)
   const hasOpacity = primitive.opacity !== undefined && primitive.opacity < 1
+  useAnimation(meshRef, primitive)
+
+  // Text primitives use a separate component
+  if (primitive.type === 'text') {
+    return <CraftedTextMesh primitive={primitive} />
+  }
+
   return (
     <mesh
+      ref={meshRef}
       position={primitive.position}
       rotation={primitive.rotation || [0, 0, 0]}
       scale={primitive.scale}

@@ -301,7 +301,7 @@ export function ProfileButton() {
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-lg font-bold text-green-400">{profile.credits}</p>
+                <p className="text-lg font-bold text-green-400">{Number.isInteger(profile.credits) ? profile.credits : profile.credits.toFixed(2)}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Credits</p>
               </div>
               <div>

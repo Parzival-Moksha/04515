@@ -189,6 +189,7 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
     && (asset.provider === 'meshy' || asset.provider === 'tripo')
     && asset.action !== 'remesh'
   // Rig: Meshy + Tripo — only character-mode assets (humanoids conjured for rigging)
+  // Lineage: base → rig. Rig = anim now (library animations handle dance moves)
   const canRig = asset.status === 'ready'
     && (asset.provider === 'meshy' || asset.provider === 'tripo')
     && asset.action !== 'rig' && asset.action !== 'animate'
@@ -312,16 +313,12 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
         {/* ░▒▓ Action buttons row ▓▒░ */}
         {asset.status === 'ready' && (
           <div className="flex gap-1 mt-1">
-            {/* Place/unplace */}
+            {/* Place — always available, allows multiple copies of same asset */}
             <button
-              onClick={(e) => { e.stopPropagation(); isInWorld ? onRemove(asset.id) : onPlace(asset.id) }}
-              className={`flex-1 text-[10px] py-0.5 rounded border transition-colors font-mono ${
-                isInWorld
-                  ? 'text-gray-500 border-gray-700/30 hover:text-red-400 hover:border-red-500/30'
-                  : 'text-emerald-400/70 border-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/40 bg-emerald-500/5'
-              }`}
+              onClick={(e) => { e.stopPropagation(); onPlace(asset.id) }}
+              className="flex-1 text-[10px] py-0.5 rounded border transition-colors font-mono text-emerald-400/70 border-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/40 bg-emerald-500/5"
             >
-              {isInWorld ? 'unplace' : '+ place'}
+              + place{isInWorld ? ' another' : ''}
             </button>
 
             {/* Texture button — for untextured meshy previews */}
@@ -371,13 +368,22 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
             {/* ░▒▓ Rig button — breathe a skeleton into the sculpture ▓▒░ */}
             {canRig && onRig && (
               <button
-                onClick={(e) => { e.stopPropagation(); onRig(asset.id) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // Warn about high-poly models (Meshy rig limit: 300k faces)
+                  const tris = asset.metadata?.triangleCount || 0
+                  if (tris > 300000) {
+                    if (!window.confirm(`This model has ${Math.round(tris / 1000)}k triangles — Meshy rig limit is 300k. Remesh first to reduce poly count, then rig. Continue anyway?`)) return
+                  }
+                  onRig(asset.id)
+                }}
                 className="text-[10px] py-0.5 px-1.5 rounded border transition-colors font-mono text-amber-400/80 border-amber-500/20 hover:text-amber-300 hover:border-amber-500/40 bg-amber-500/5"
-                title="Auto-rig: add skeleton + walk/run animations (0.5 credits)"
+                title="Auto-rig: add Mixamo skeleton for animations (1 credit). Models >300k faces must be remeshed first."
               >
                 &#9760; Rig
               </button>
             )}
+
           </div>
         )}
       </div>
@@ -426,7 +432,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   // ─═̷─ Wizard state ─═̷─
   const [mode, setMode] = useState<'conjure' | 'craft' | 'world' | 'assets' | 'placed' | 'settings'>('conjure')
   const [provider, setProvider] = useState<ProviderName>('meshy')
-  const [tier, setTier] = useState(PROVIDERS[0].tiers[0].id)
+  const [tier, setTier] = useState(PROVIDERS[0].tiers[1]?.id || PROVIDERS[0].tiers[0].id)  // Default: textured (refine)
   const [prompt, setPrompt] = useState('')
   const [isCasting, setIsCasting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -443,16 +449,15 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
 
   // ░▒▓ Image-to-3D section has its own provider/tier/char state ▓▒░
   const [imgProvider, setImgProvider] = useState<ProviderName>('tripo')
-  const [imgTier, setImgTier] = useState(PROVIDERS.find(p => p.name === 'tripo')?.tiers[1]?.id || 'standard')
+  const [imgTier, setImgTier] = useState(PROVIDERS.find(p => p.name === 'tripo')?.tiers[3]?.id || 'premium')  // Default: v3.1
   const [imgCharacterMode, setImgCharacterMode] = useState(false)
   const [imgPrompt, setImgPrompt] = useState('')  // optional prompt hint for image-to-3D
 
-  // ░▒▓ Auto-pipeline — chain rig + animate after conjure completes ▓▒░
+  // ░▒▓ Auto-pipeline — chain rig after conjure completes ▓▒░
+  // (Auto-animate removed: library animations handle all dance moves locally)
   const [autoRig, setAutoRig] = useState(false)
-  const [autoAnimate, setAutoAnimate] = useState(false)
   // Same for image section
   const [imgAutoRig, setImgAutoRig] = useState(false)
-  const [imgAutoAnimate, setImgAutoAnimate] = useState(false)
 
   // ░▒▓ Convert dropped/selected image file to base64 data URI ▓▒░
   const handleImageFile = useCallback((file: File) => {
@@ -495,6 +500,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const deleteFromLibrary = useOasisStore(s => s.deleteFromLibrary)
   const [activeCrafts, setActiveCrafts] = useState(0)
   const craftLoading = activeCrafts > 0
+  const [craftAnimated, setCraftAnimated] = useState(false)
 
 
   // ─═̷─ Ground texture + paint mode ─═̷─
@@ -612,13 +618,14 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const handleProviderChange = useCallback((newProvider: ProviderName) => {
     setProvider(newProvider)
     const p = PROVIDERS.find(pp => pp.name === newProvider)
-    if (p) setTier(p.tiers[0].id)
+    // Default to LAST tier (best quality) when switching providers
+    if (p) setTier(p.tiers[p.tiers.length - 1].id)
   }, [])
 
   const handleImgProviderChange = useCallback((newProvider: ProviderName) => {
     setImgProvider(newProvider)
     const p = PROVIDERS.find(pp => pp.name === newProvider)
-    if (p) setImgTier(p.tiers[0].id)
+    if (p) setImgTier(p.tiers[p.tiers.length - 1].id)
   }, [])
 
   // Provider objects for image section
@@ -646,13 +653,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         options.characterMode = true
         options.characterOptions = { poseMode: 'a-pose' as const, topology: 'quad' as const, symmetry: true }
       }
-      // ░▒▓ Auto-pipeline flags — backend chains the steps ▓▒░
+      // ░▒▓ Auto-pipeline flag — backend chains rig after conjure ▓▒░
       if (characterMode && autoRig) {
         options.autoRig = true
-        if (autoAnimate) {
-          options.autoAnimate = true
-          options.animationPreset = 'free:walk'  // Walk is the universal default
-        }
       }
 
       await startConjure(prompt.trim(), provider, tier, Object.keys(options).length > 0 ? options as never : undefined)
@@ -662,7 +665,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
     } finally {
       setIsCasting(false)
     }
-  }, [prompt, isCasting, provider, tier, startConjure, characterMode, autoRig, autoAnimate])
+  }, [prompt, isCasting, provider, tier, startConjure, characterMode, autoRig])
 
   // ═══════════════════════════════════════════════════════════════════════
   // CAST THE SPELL — Image-to-3D
@@ -684,10 +687,6 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
       }
       if (imgCharacterMode && imgAutoRig) {
         options.autoRig = true
-        if (imgAutoAnimate) {
-          options.autoAnimate = true
-          options.animationPreset = 'free:walk'  // Walk is the universal default
-        }
       }
 
       await startConjure(castPrompt, imgProvider, imgTier, options as never)
@@ -699,7 +698,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
     } finally {
       setIsCasting(false)
     }
-  }, [imageUrl, isCasting, imgProvider, imgTier, imgPrompt, imgCharacterMode, imgAutoRig, imgAutoAnimate, startConjure])
+  }, [imageUrl, isCasting, imgProvider, imgTier, imgPrompt, imgCharacterMode, imgAutoRig, startConjure])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CRAFT — LLM procedural geometry
@@ -729,7 +728,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
       const res = await fetch(`${OASIS_BASE}/api/craft`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: iterativePrompt, model: craftModel }),
+        body: JSON.stringify({ prompt: iterativePrompt, model: craftModel, animated: craftAnimated }),
       })
 
       if (!res.ok) {
@@ -1051,7 +1050,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 {/* Stuff / Character toggle + auto-pipeline */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex rounded overflow-hidden border border-gray-700/40">
-                    <button onClick={() => { setCharacterMode(false); setAutoRig(false); setAutoAnimate(false) }}
+                    <button onClick={() => { setCharacterMode(false); setAutoRig(false) }}
                       className={`text-[10px] px-2 py-0.5 font-mono transition-colors ${!characterMode ? 'bg-orange-500/20 text-orange-300' : 'text-gray-400 hover:text-gray-300 bg-black/30'}`}
                       title="Object/stuff mode — standard 3D model">
                       {'\uD83D\uDCE6'} Stuff
@@ -1064,18 +1063,11 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </div>
                   {characterMode && (
                     <>
-                      <label className="flex items-center gap-1 cursor-pointer" title="Auto-rig after generation completes">
-                        <input type="checkbox" checked={autoRig} onChange={(e) => { setAutoRig(e.target.checked); if (!e.target.checked) setAutoAnimate(false) }}
+                      <label className="flex items-center gap-1 cursor-pointer" title="Auto-rig after generation completes (1 extra credit)">
+                        <input type="checkbox" checked={autoRig} onChange={(e) => setAutoRig(e.target.checked)}
                           className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-amber-500" />
-                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig</span>
+                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig (1 credit)</span>
                       </label>
-                      {autoRig && (
-                        <label className="flex items-center gap-1 cursor-pointer" title="Auto-animate after rig completes">
-                          <input type="checkbox" checked={autoAnimate} onChange={(e) => setAutoAnimate(e.target.checked)}
-                            className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-green-500" />
-                          <span className="text-[10px] text-green-400/70 font-mono">Auto-animate</span>
-                        </label>
-                      )}
                     </>
                   )}
                 </div>
@@ -1089,7 +1081,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   <button onClick={handleCast} disabled={!prompt.trim() || isCasting}
                     className="px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed self-end"
                     style={{ background: `${forgeColor}33`, color: forgeColor, border: `1px solid ${forgeColor}55` }}>
-                    {isCasting ? '...' : characterMode ? (autoRig ? (autoAnimate ? '\uD83E\uDDCD\u2192\u2699\u2192\uD83C\uDFC3' : '\uD83E\uDDCD\u2192\u2699') : 'Cast \uD83E\uDDCD') : 'Cast \u2728'}
+                    {isCasting ? '...' : characterMode ? (autoRig ? '\uD83E\uDDCD\u2192\u2699' : 'Cast \uD83E\uDDCD') : 'Cast \u2728'}
                   </button>
                 </div>
               </div>
@@ -1152,15 +1144,15 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </select>
                   <select value={imgTier} onChange={(e) => setImgTier(e.target.value)}
                     className="text-[11px] bg-black/60 border border-gray-700 rounded px-2 py-1 text-gray-300 focus:border-pink-500/50 focus:outline-none cursor-pointer">
-                    {imgSelectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {imgSelectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.creditCost} cr)</option>)}
                   </select>
-                  <span className="text-[9px] text-gray-400 font-mono ml-auto">~{imgSelectedTier.estimatedSeconds}s | {imgSelectedTier.estimatedCost}</span>
+                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{imgSelectedTier.estimatedSeconds}s | {imgSelectedTier.creditCost} credit{imgSelectedTier.creditCost !== 1 ? 's' : ''}</span>
                 </div>
 
                 {/* Stuff / Character toggle + auto-pipeline */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex rounded overflow-hidden border border-gray-700/40">
-                    <button onClick={() => { setImgCharacterMode(false); setImgAutoRig(false); setImgAutoAnimate(false) }}
+                    <button onClick={() => { setImgCharacterMode(false); setImgAutoRig(false) }}
                       className={`text-[10px] px-2 py-0.5 font-mono transition-colors ${!imgCharacterMode ? 'bg-pink-500/20 text-pink-300' : 'text-gray-400 hover:text-gray-300 bg-black/30'}`}
                       title="Object/stuff mode — standard 3D model">
                       {'\uD83D\uDCE6'} Stuff
@@ -1173,18 +1165,11 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </div>
                   {imgCharacterMode && (
                     <>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={imgAutoRig} onChange={(e) => { setImgAutoRig(e.target.checked); if (!e.target.checked) setImgAutoAnimate(false) }}
+                      <label className="flex items-center gap-1 cursor-pointer" title="Auto-rig after generation completes (1 extra credit)">
+                        <input type="checkbox" checked={imgAutoRig} onChange={(e) => setImgAutoRig(e.target.checked)}
                           className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-amber-500" />
-                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig</span>
+                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig (1 credit)</span>
                       </label>
-                      {imgAutoRig && (
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={imgAutoAnimate} onChange={(e) => setImgAutoAnimate(e.target.checked)}
-                            className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-green-500" />
-                          <span className="text-[10px] text-green-400/70 font-mono">Auto-animate</span>
-                        </label>
-                      )}
                     </>
                   )}
                 </div>
@@ -1198,7 +1183,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   <button onClick={handleImageCast} disabled={!imageUrl.trim() || isCasting}
                     className="px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed self-end"
                     style={{ background: '#EC489933', color: '#EC4899', border: '1px solid #EC489955' }}>
-                    {isCasting ? '...' : imgCharacterMode ? (imgAutoRig ? (imgAutoAnimate ? '\uD83D\uDCF7\u2192\u2699\u2192\uD83C\uDFC3' : '\uD83D\uDCF7\u2192\u2699') : 'Cast \uD83D\uDCF7\uD83E\uDDCD') : 'Cast \uD83D\uDCF7'}
+                    {isCasting ? '...' : imgCharacterMode ? (imgAutoRig ? '\uD83D\uDCF7\u2192\u2699' : 'Cast \uD83D\uDCF7\uD83E\uDDCD') : 'Cast \uD83D\uDCF7'}
                   </button>
                 </div>
               </div>
@@ -1208,16 +1193,40 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         </div>
       )}
 
-      {/* ─═̷─═̷─ CRAFT MODE info bar ─═̷─═̷─ */}
+      {/* ─═̷─═̷─ CRAFT MODE info bar + model selector + animated toggle ─═̷─═̷─ */}
       {mode === 'craft' && (
         <div className="px-3 py-2 border-b border-gray-700/30 flex items-center justify-between flex-shrink-0"
           style={{ background: 'rgba(20, 20, 20, 0.5)' }}
         >
-          <div className="text-xs text-blue-400/70 font-mono">
-            LLM procedural geometry
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-blue-400/70 font-mono">LLM craft</span>
+            {/* Static / Animated toggle */}
+            <button
+              onClick={() => setCraftAnimated(!craftAnimated)}
+              className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-all ${
+                craftAnimated
+                  ? 'border-purple-500/50 bg-purple-500/15 text-purple-300'
+                  : 'border-gray-700/30 bg-black/40 text-gray-500 hover:text-gray-400'
+              }`}
+              title={craftAnimated ? 'Animated mode — LLM will add motion to primitives' : 'Static mode — no animations'}
+            >
+              {craftAnimated ? 'Animated' : 'Static'}
+            </button>
           </div>
-          <div className="text-[9px] text-gray-400 font-mono">
-            {craftedScenes.length} scene{craftedScenes.length !== 1 ? 's' : ''} | {craftModel.split('/').pop()}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-gray-500 font-mono">{craftedScenes.length} scene{craftedScenes.length !== 1 ? 's' : ''}</span>
+            <select
+              value={craftModel}
+              onChange={(e) => setCraftModel(e.target.value)}
+              className="text-[10px] bg-black/60 border border-blue-700/30 rounded px-1.5 py-0.5 text-blue-300 font-mono cursor-pointer focus:outline-none focus:border-blue-500/50 appearance-none"
+              style={{ backgroundImage: 'none' }}
+              title="LLM model for crafting + terrain"
+            >
+              <option value="moonshotai/kimi-k2.5">Kimi K2.5</option>
+              <option value="anthropic/claude-sonnet-4-6">Sonnet 4.6</option>
+              <option value="anthropic/claude-haiku-4-5">Haiku 4.5</option>
+              <option value="z-ai/glm-5">GLM-5</option>
+            </select>
           </div>
         </div>
       )}
@@ -2445,7 +2454,16 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {[...conjuredAssets].sort((a, b) => {
+                {[...conjuredAssets]
+                .filter(asset => {
+                  // Hide parent assets when a ready child exists (lineage collapse)
+                  // e.g. hide base model when rig is ready, hide rig when animate is ready
+                  const hasReadyChild = conjuredAssets.some(
+                    c => c.sourceAssetId === asset.id && c.status === 'ready'
+                  )
+                  return !hasReadyChild
+                })
+                .sort((a, b) => {
                   // In-progress on tippy top, newest first within each group
                   const aActive = !['ready', 'failed'].includes(a.status) ? 1 : 0
                   const bActive = !['ready', 'failed'].includes(b.status) ? 1 : 0
@@ -2457,7 +2475,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                     key={asset.id}
                     asset={asset}
                     onDelete={deleteAsset}
-                    isInWorld={false}
+                    isInWorld={worldConjuredAssetIds.includes(asset.id)}
                     onPlace={(id) => {
                       const a = conjuredAssets.find(c => c.id === id)
                       if (!a || !a.glbPath) return

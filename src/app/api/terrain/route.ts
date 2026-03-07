@@ -7,6 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { TerrainParams } from '../../../lib/forge/terrain-generator'
+import { auth } from '../../../lib/auth'
+import { getPrice, deductCredits } from '../../../lib/pricing'
 
 const ALLOWED_MODELS = [
   'anthropic/claude-sonnet-4-6',
@@ -120,6 +122,19 @@ export async function POST(request: NextRequest) {
     }
     if (prompt.length > 2000) {
       return NextResponse.json({ error: 'Prompt too long (2000 char max)' }, { status: 400 })
+    }
+
+    // ░▒▓ AUTH + CREDIT CHECK ▓▒░
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const creditCost = await getPrice('terrain')
+    if (creditCost > 0) {
+      const result = await deductCredits(session.user.id, creditCost)
+      if (!result.success) {
+        return NextResponse.json({ error: 'Insufficient credits', credits: result.newBalance, required: creditCost }, { status: 402 })
+      }
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY

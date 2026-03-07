@@ -74,7 +74,9 @@ async function persistThumbnail(assetId: string, externalUrl: string): Promise<s
     const localPath = join(dir, `${assetId}_thumb.jpg`)
     if (existsSync(localPath)) return `/conjured/${assetId}_thumb.jpg`  // already saved
 
-    const res = await fetch(externalUrl)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+    const res = await fetch(externalUrl, { signal: controller.signal }).finally(() => clearTimeout(timer))
     if (!res.ok) return null
     const buffer = Buffer.from(await res.arrayBuffer())
     if (buffer.length > 10 * 1024 * 1024) return null  // 10MB max for provider thumbnails
@@ -349,6 +351,7 @@ async function runAutoRigPipeline(
   const rigAsset: ConjuredAsset = {
     id: rigId,
     prompt: `[Rigging] ${parentAsset.prompt}`,
+    displayName: `rigged ${provider}`,
     provider,
     tier: 'rig',
     providerTaskId: '',
@@ -637,9 +640,10 @@ export async function POST(request: Request) {
     }
 
     // Deduct credits — gte guard prevents going negative in race conditions
+    const newBalance = Math.round((currentCredits - creditCost) * 100) / 100
     const { error: deductError } = await sb
       .from('profiles')
-      .update({ credits: currentCredits - creditCost })
+      .update({ credits: newBalance })
       .eq('id', session.user.id)
       .gte('credits', creditCost)
 
@@ -648,7 +652,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
     }
 
-    console.log(`[Forge] Deducted ${creditCost} credit(s) from ${session.user.id} (${currentCredits} → ${currentCredits - creditCost})`)
+    console.log(`[Forge] Deducted ${creditCost} credit(s) from ${session.user.id} (${currentCredits} → ${newBalance})`)
 
     // ░▒▓ Create the asset entry in the registry ▓▒░
     const id = generateAssetId()

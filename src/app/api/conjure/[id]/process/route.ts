@@ -298,6 +298,56 @@ async function runTexturePipeline(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// FREE ANIMATION PIPELINE — Meshy rig includes walk/run GLBs at no cost
+// ░▒▓ Re-query rig status to get animation URLs, download directly ▓▒░
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function runFreeAnimationPipeline(
+  assetId: string,
+  rigProviderTaskId: string,
+  presetId: string,  // 'free:walk' or 'free:run'
+): Promise<void> {
+  const client = new MeshyClient()
+  try {
+    console.log(`[Forge:Process] Free animation pipeline for ${assetId} (${presetId})`)
+    updateAsset(assetId, { status: 'generating', progress: 50 })
+
+    // Re-query the rig to get animation URLs
+    const rigStatus = await client.checkRigStatus(rigProviderTaskId)
+    if (!rigStatus.rigResult) {
+      updateAsset(assetId, { status: 'failed', progress: 0, errorMessage: 'Rig result not found — cannot extract free animation', completedAt: new Date().toISOString() })
+      return
+    }
+
+    const animType = presetId.replace('free:', '')  // 'walk' or 'run'
+    const animUrl = animType === 'run' ? rigStatus.rigResult.runAnimUrl : rigStatus.rigResult.walkAnimUrl
+    if (!animUrl) {
+      updateAsset(assetId, { status: 'failed', progress: 0, errorMessage: `Free ${animType} animation URL not found in rig result`, completedAt: new Date().toISOString() })
+      return
+    }
+
+    updateAsset(assetId, { status: 'downloading', progress: 80 })
+    const conjuredDir = ensureConjuredDir()
+    const destPath = join(conjuredDir, `${assetId}.glb`)
+    await client.downloadResult(animUrl, destPath)
+
+    const fileSizeBytes = existsSync(destPath) ? statSync(destPath).size : undefined
+    updateAsset(assetId, {
+      status: 'ready',
+      progress: 100,
+      glbPath: `/conjured/${assetId}.glb`,
+      completedAt: new Date().toISOString(),
+      metadata: { fileSizeBytes },
+    })
+    console.log(`[Forge:Process] ${assetId} FREE ${animType} animation downloaded`)
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    console.error(`[Forge:Process] ${assetId} free animation error:`, errorMessage)
+    updateAsset(assetId, { status: 'failed', progress: 0, errorMessage, completedAt: new Date().toISOString() })
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/conjure/[id]/process — The sculptor's second pass
 //
 // Body: { action: 'texture' | 'remesh' | 'rig' | 'animate', options?: { ... } }
@@ -370,34 +420,42 @@ export async function POST(
       return NextResponse.json({ error: 'Sign in to process assets' }, { status: 401 })
     }
 
-    const creditCost = POST_PROCESS_COSTS[body.action] ?? 1
-    const sb = getServerSupabase()
-    const { data: profile } = await sb
-      .from('profiles')
-      .select('credits')
-      .eq('id', session.user.id)
-      .single()
+    // Free Meshy animations (walk/run bundled with rig) cost nothing
+    const isFreeAnim = body.action === 'animate' && body.options?.animationPresetId?.startsWith('free:')
+    const creditCost = isFreeAnim ? 0 : (POST_PROCESS_COSTS[body.action] ?? 1)
 
-    const currentCredits = profile?.credits ?? 0
-    if (currentCredits < creditCost) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', credits: currentCredits, required: creditCost },
-        { status: 402 },
-      )
+    if (creditCost > 0) {
+      const sb = getServerSupabase()
+      const { data: profile } = await sb
+        .from('profiles')
+        .select('credits')
+        .eq('id', session.user.id)
+        .single()
+
+      const currentCredits = profile?.credits ?? 0
+      if (currentCredits < creditCost) {
+        return NextResponse.json(
+          { error: 'Insufficient credits', credits: currentCredits, required: creditCost },
+          { status: 402 },
+        )
+      }
+
+      const newBalance = Math.round((currentCredits - creditCost) * 100) / 100
+      const { error: deductError } = await sb
+        .from('profiles')
+        .update({ credits: newBalance })
+        .eq('id', session.user.id)
+        .gte('credits', creditCost)
+
+      if (deductError) {
+        console.error('[Forge:Process] Credit deduction failed:', deductError.message)
+        return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
+      }
+
+      console.log(`[Forge:Process] Deducted ${creditCost} credit(s) for ${body.action} from ${session.user.id} (${currentCredits} → ${newBalance})`)
+    } else {
+      console.log(`[Forge:Process] Free ${body.action} for ${session.user.id} (no credit cost)`)
     }
-
-    const { error: deductError } = await sb
-      .from('profiles')
-      .update({ credits: currentCredits - creditCost })
-      .eq('id', session.user.id)
-      .gte('credits', creditCost)
-
-    if (deductError) {
-      console.error('[Forge:Process] Credit deduction failed:', deductError.message)
-      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
-    }
-
-    console.log(`[Forge:Process] Deducted ${creditCost} credit(s) for ${body.action} from ${session.user.id}`)
 
     // ░▒▓ Create the child asset ▓▒░
     const newId = generateAssetId()
@@ -410,9 +468,16 @@ export async function POST(
     const actionLabel = ACTION_LABELS[body.action] || body.action
     const tierLabel = TIER_LABELS[body.action] || body.action
 
+    // Display name: "rigged tripo" / "remeshed meshy" — clean, readable
+    const actionPast: Record<string, string> = {
+      texture: 'textured', remesh: 'remeshed', rig: 'rigged', animate: 'animated',
+    }
+    const displayName = `${actionPast[body.action] || body.action} ${source.provider}`
+
     const childAsset: ConjuredAsset = {
       id: newId,
       prompt: `[${actionLabel}] ${source.prompt}`,
+      displayName,
       provider: source.provider,   // ░▒▓ Inherit provider from parent — not hardcoded to meshy ▓▒░
       tier: tierLabel,
       providerTaskId: '',
@@ -465,12 +530,19 @@ export async function POST(
           { status: 400 },
         )
       }
-      const client = getPostProcessClient(source.provider)
-      runGenericPipeline(
-        newId, 'Animate', client,
-        () => client.animate(source.providerTaskId, presetId),
-        (taskId) => client.checkAnimateStatus(taskId),
-      ).catch(err => console.error(`[Forge:Process] Animate pipeline crash for ${newId}:`, err))
+
+      // ░▒▓ Meshy FREE animations — download directly from rig result ▓▒░
+      if (presetId.startsWith('free:') && source.provider === 'meshy') {
+        runFreeAnimationPipeline(newId, source.providerTaskId, presetId)
+          .catch(err => console.error(`[Forge:Process] Free anim pipeline crash for ${newId}:`, err))
+      } else {
+        const client = getPostProcessClient(source.provider)
+        runGenericPipeline(
+          newId, 'Animate', client,
+          () => client.animate(source.providerTaskId, presetId),
+          (taskId) => client.checkAnimateStatus(taskId),
+        ).catch(err => console.error(`[Forge:Process] Animate pipeline crash for ${newId}:`, err))
+      }
     }
 
     return NextResponse.json(

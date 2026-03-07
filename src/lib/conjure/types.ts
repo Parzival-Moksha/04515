@@ -64,10 +64,10 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: 'Tripo',
     envKey: 'TRIPO_API_KEY',
     tiers: [
-      { id: 'turbo', name: 'Turbo', description: 'Fastest (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '$0.50', creditCost: 0.5 },
-      { id: 'draft', name: 'v2.0', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '$0.50', creditCost: 0.5 },
-      { id: 'standard', name: 'v2.5', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '$0.50', creditCost: 0.5 },
-      { id: 'premium', name: 'v3.1', description: 'Latest, best detail (v3.1)', estimatedSeconds: 60, estimatedCost: '$0.50', creditCost: 0.5 },
+      { id: 'turbo', name: 'Turbo', description: 'Fastest (Turbo v1.0)', estimatedSeconds: 10, estimatedCost: '$1', creditCost: 1 },
+      { id: 'draft', name: 'v2.0', description: 'Fast shape (v2.0)', estimatedSeconds: 20, estimatedCost: '$1', creditCost: 1 },
+      { id: 'standard', name: 'v2.5', description: 'Balanced quality (v2.5)', estimatedSeconds: 40, estimatedCost: '$1', creditCost: 1 },
+      { id: 'premium', name: 'v3.1', description: 'Latest, best detail (v3.1)', estimatedSeconds: 60, estimatedCost: '$1', creditCost: 1 },
     ],
   },
 ]
@@ -78,10 +78,10 @@ export const PROVIDERS: ProviderDefinition[] = [
 
 export const POST_PROCESS_COSTS: Record<string, number> = {
   texture: 1,
-  remesh: 0.5,
-  rig: 0.5,
-  animate: 0.5,
-  craft: 0.05,
+  remesh: 1,
+  rig: 1,
+  animate: 1,
+  craft: 0,  // LLM craft — free by default, dynamically overridden via admin dashboard
 }
 
 // New users get this many free credits to try the Forge
@@ -181,7 +181,17 @@ export interface ConjuredAsset {
 // CRAFTED SCENES (LLM procedural geometry)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'capsule'
+export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'capsule' | 'text'
+
+// Animation types for crafted primitives — LLM can assign these
+export type CraftAnimationType = 'rotate' | 'bob' | 'pulse' | 'swing' | 'orbit'
+
+export interface CraftAnimation {
+  type: CraftAnimationType
+  speed?: number                 // multiplier, default 1. Higher = faster.
+  axis?: 'x' | 'y' | 'z'        // default 'y'. Which axis the animation acts on.
+  amplitude?: number             // default 0.5. How far it moves (bob height, swing angle, orbit radius)
+}
 
 export interface CraftedPrimitive {
   type: PrimitiveType
@@ -194,6 +204,12 @@ export interface CraftedPrimitive {
   emissive?: string
   emissiveIntensity?: number
   opacity?: number              // 0-1, <1 enables transparency (glass, water, holograms)
+  animation?: CraftAnimation    // optional per-primitive animation
+  // Text-specific fields (only when type === 'text')
+  text?: string                  // the actual text content
+  fontSize?: number              // size in world units, default 1
+  anchorX?: 'left' | 'center' | 'right'  // horizontal alignment, default 'center'
+  anchorY?: 'top' | 'middle' | 'bottom'  // vertical alignment, default 'middle'
 }
 
 export interface CraftedScene {

@@ -88,6 +88,18 @@ function mapMeshyStatus(status: MeshyStatusResponse['status']): ConjureStatus {
 const MESHY_V2 = 'https://api.meshy.ai/openapi/v2'
 const MESHY_V1 = 'https://api.meshy.ai/openapi/v1'
 
+// ░▒▓ FETCH WITH TIMEOUT — no more "terminated" hangs ▓▒░
+// AbortController kills the request if it takes too long.
+// API calls: 60s. Downloads: 5 minutes.
+const API_TIMEOUT_MS = 60_000
+const DOWNLOAD_TIMEOUT_MS = 5 * 60_000
+
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MESHY REMESH API TYPES — retopology from the blacksmith's anvil
 // ═══════════════════════════════════════════════════════════════════════════
@@ -190,7 +202,7 @@ export class MeshyClient implements ConjureProviderClient {
     if (options?.topology) previewBody.topology = options.topology
     if (options?.symmetry !== undefined) previewBody.symmetry = options.symmetry ? 'on' : 'off'
 
-    const previewRes = await fetch(`${MESHY_V2}/text-to-3d`, {
+    const previewRes = await fetchWithTimeout(`${MESHY_V2}/text-to-3d`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(previewBody),
@@ -219,7 +231,7 @@ export class MeshyClient implements ConjureProviderClient {
 
     // ░▒▓ Phase 3: Start the refine pass on top of preview ▓▒░
     console.log(`[Forge:Meshy] Preview done. Starting refine pass...`)
-    const refineRes = await fetch(`${MESHY_V2}/text-to-3d`, {
+    const refineRes = await fetchWithTimeout(`${MESHY_V2}/text-to-3d`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
@@ -282,7 +294,7 @@ export class MeshyClient implements ConjureProviderClient {
    * rawStatus — fetch raw Meshy status (used by both checkStatus and waitForPreview)
    */
   private async rawStatus(taskId: string): Promise<MeshyStatusResponse> {
-    const res = await fetch(`${MESHY_V2}/text-to-3d/${taskId}`, {
+    const res = await fetchWithTimeout(`${MESHY_V2}/text-to-3d/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -302,7 +314,7 @@ export class MeshyClient implements ConjureProviderClient {
   async downloadResult(resultUrl: string, destPath: string): Promise<void> {
     console.log(`[Forge:Meshy] Downloading GLB from: ${resultUrl.slice(0, 80)}...`)
 
-    const res = await fetch(resultUrl)
+    const res = await fetchWithTimeout(resultUrl, {}, DOWNLOAD_TIMEOUT_MS)
     if (!res.ok) {
       throw new Error(`[Forge:Meshy] Download failed (${res.status})`)
     }
@@ -344,7 +356,7 @@ export class MeshyClient implements ConjureProviderClient {
     }
     if (texturePrompt) body.texture_prompt = texturePrompt
 
-    const res = await fetch(`${MESHY_V2}/text-to-3d`, {
+    const res = await fetchWithTimeout(`${MESHY_V2}/text-to-3d`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -375,7 +387,7 @@ export class MeshyClient implements ConjureProviderClient {
   }): Promise<{ taskId: string }> {
     console.log(`[Forge:Meshy] Starting remesh on task ${sourceTaskId} (${options.topology}, ${options.targetPolycount} polys)`)
 
-    const res = await fetch(`${MESHY_V1}/remesh`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/remesh`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
@@ -406,7 +418,7 @@ export class MeshyClient implements ConjureProviderClient {
     progress: number
     resultUrl?: string
   }> {
-    const res = await fetch(`${MESHY_V1}/remesh/${taskId}`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/remesh/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -443,7 +455,7 @@ export class MeshyClient implements ConjureProviderClient {
     if (options?.topology) body.topology = options.topology
     if (options?.symmetry !== undefined) body.symmetry = options.symmetry ? 'on' : 'off'
 
-    const res = await fetch(`${MESHY_V1}/image-to-3d`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/image-to-3d`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -469,7 +481,7 @@ export class MeshyClient implements ConjureProviderClient {
     resultUrl?: string
     thumbnailUrl?: string
   }> {
-    const res = await fetch(`${MESHY_V1}/image-to-3d/${taskId}`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/image-to-3d/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -506,7 +518,7 @@ export class MeshyClient implements ConjureProviderClient {
     }
     if (options?.heightMeters) body.height_meters = options.heightMeters
 
-    const res = await fetch(`${MESHY_V1}/rigging`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/rigging`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -532,7 +544,7 @@ export class MeshyClient implements ConjureProviderClient {
     resultUrl?: string
     rigResult?: RigResult
   }> {
-    const res = await fetch(`${MESHY_V1}/rigging/${taskId}`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/rigging/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -592,7 +604,7 @@ export class MeshyClient implements ConjureProviderClient {
     const presetId = Array.isArray(animationPresetId) ? animationPresetId[0] : animationPresetId
     console.log(`[Forge:Meshy] Starting animate on task ${riggedTaskId} (preset: ${presetId})`)
 
-    const res = await fetch(`${MESHY_V1}/animations`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/animations`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
@@ -619,7 +631,7 @@ export class MeshyClient implements ConjureProviderClient {
     progress: number
     resultUrl?: string
   }> {
-    const res = await fetch(`${MESHY_V1}/animations/${taskId}`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/animations/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -644,7 +656,7 @@ export class MeshyClient implements ConjureProviderClient {
   async listAnimationPresets(): Promise<AnimationPreset[]> {
     console.log(`[Forge:Meshy] Fetching animation presets...`)
 
-    const res = await fetch(`${MESHY_V1}/animations/presets`, {
+    const res = await fetchWithTimeout(`${MESHY_V1}/animations/presets`, {
       method: 'GET',
       headers: this.headers(),
     })

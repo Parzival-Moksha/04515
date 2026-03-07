@@ -147,6 +147,16 @@ function deepScanForUrl(obj: unknown, depth = 0): string | undefined {
 
 const TRIPO_BASE = 'https://api.tripo3d.ai/v2/openapi'
 
+// ░▒▓ FETCH WITH TIMEOUT — no more "terminated" hangs ▓▒░
+const API_TIMEOUT_MS = 60_000
+const DOWNLOAD_TIMEOUT_MS = 5 * 60_000
+
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
 export class TripoClient implements ConjureProviderClient {
   readonly name: ProviderName = 'tripo'
 
@@ -206,7 +216,7 @@ export class TripoClient implements ConjureProviderClient {
     // Sending quad=true to Tripo generation tasks causes the API to return FBX
     // instead of GLB (the "shapeshifter" incident). quad is ONLY for smart_low_poly retopo.
 
-    const res = await fetch(`${TRIPO_BASE}/task`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -233,7 +243,7 @@ export class TripoClient implements ConjureProviderClient {
     resultUrl?: string
     thumbnailUrl?: string
   }> {
-    const res = await fetch(`${TRIPO_BASE}/task/${taskId}`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task/${taskId}`, {
       method: 'GET',
       headers: this.headers(),
     })
@@ -295,7 +305,7 @@ export class TripoClient implements ConjureProviderClient {
   async downloadResult(resultUrl: string, destPath: string): Promise<void> {
     console.log(`[Forge:Tripo] Downloading GLB from: ${resultUrl.slice(0, 80)}...`)
 
-    const res = await fetch(resultUrl)
+    const res = await fetchWithTimeout(resultUrl, {}, DOWNLOAD_TIMEOUT_MS)
     if (!res.ok) {
       throw new Error(`[Forge:Tripo] Download failed (${res.status})`)
     }
@@ -348,7 +358,7 @@ export class TripoClient implements ConjureProviderClient {
 
     const bodyBuffer = Buffer.concat(bodyParts)
 
-    const res = await fetch(`${TRIPO_BASE}/upload`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/upload`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
@@ -397,7 +407,7 @@ export class TripoClient implements ConjureProviderClient {
 
     // ░▒▓ NOTE: quad is NOT valid for image_to_model — only for smart_low_poly ▓▒░
 
-    const res = await fetch(`${TRIPO_BASE}/task`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -439,7 +449,7 @@ export class TripoClient implements ConjureProviderClient {
     if (rigType) body.rig_type = rigType
     if (rigSpec) body.spec = rigSpec
 
-    const res = await fetch(`${TRIPO_BASE}/task`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -504,7 +514,7 @@ export class TripoClient implements ConjureProviderClient {
       animation: normalized,
     }
 
-    const res = await fetch(`${TRIPO_BASE}/task`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
@@ -546,7 +556,7 @@ export class TripoClient implements ConjureProviderClient {
   }): Promise<{ taskId: string }> {
     console.log(`[Forge:Tripo] Starting retopo on task ${sourceTaskId} (${options.topology}, ${options.targetPolycount} faces)`)
 
-    const res = await fetch(`${TRIPO_BASE}/task`, {
+    const res = await fetchWithTimeout(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({

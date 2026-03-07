@@ -7,10 +7,9 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import { NextRequest, NextResponse } from 'next/server'
-import type { CraftedScene, CraftedPrimitive, PrimitiveType } from '../../../lib/conjure/types'
-import { POST_PROCESS_COSTS } from '../../../lib/conjure/types'
+import type { CraftedScene, CraftedPrimitive, PrimitiveType, CraftAnimation, CraftAnimationType } from '../../../lib/conjure/types'
 import { auth } from '../../../lib/auth'
-import { getServerSupabase } from '../../../lib/supabase'
+import { getPrice, deductCredits } from '../../../lib/pricing'
 
 const ALLOWED_MODELS = [
   'anthropic/claude-sonnet-4-6',
@@ -26,7 +25,7 @@ const DEFAULT_MODEL = 'moonshotai/kimi-k2.5'
 
 const CRAFT_SYSTEM_PROMPT = `You are a master 3D scene architect and sculptor. Given a text description, you design rich, detailed scenes using geometric primitives. You think in volumes, silhouettes, and composition.
 
-Available primitive types: box, sphere, cylinder, cone, torus, plane, capsule
+Available primitive types: box, sphere, cylinder, cone, torus, plane, capsule, text
 
 For each primitive, specify:
 - type: one of the primitive types
@@ -69,6 +68,14 @@ Color & material guide:
 - Neon/glow: any bright color as emissive, emissiveIntensity 1-3
 - Fabric: roughness 0.9-1.0, metalness 0
 
+TEXT PRIMITIVES — 3D floating text rendered in the world:
+When type is "text", add these fields:
+- text: string — the actual text content. Can be multi-line with \\n
+- fontSize: number — size in world units (default 1). 0.3 for labels, 1-2 for signs, 3+ for titles.
+Use text for: signs, labels, neon text, floating titles, speech bubbles, UI elements, nameplates, price tags, billboards.
+Text renders as SDF (signed distance field) — it looks crisp at any size and angle. Combine with emissive + emissiveIntensity for neon/glowing text effects.
+Example: { "type": "text", "text": "WELCOME", "position": [0, 3, 0], "scale": [1,1,1], "fontSize": 2, "color": "#FF00FF", "emissive": "#FF00FF", "emissiveIntensity": 2 }
+
 Target 8-50 primitives per scene. Simple objects need 8-15. Complex scenes (buildings, vehicles, landscapes) use 25-50. Each primitive should serve a purpose.
 
 RESPOND WITH ONLY VALID JSON. No markdown, no explanation, no code fences.
@@ -85,11 +92,44 @@ The JSON must match this exact schema:
   ]
 }`
 
+const CRAFT_ANIMATION_ADDON = `
+ANIMATIONS — bringing this scene to LIFE:
+Every scene you build should feel alive. Add an "animation" object to primitives that should move:
+- type: "rotate" — continuous rotation (windmill blades, planets, gears, fans, spinning signs, propellers)
+- type: "bob" — float up and down (hovering objects, buoys, breathing chest, UFOs, magic orbs)
+- type: "pulse" — scale oscillation (heartbeat, glowing orb, breathing creature, pulsing beacon)
+- type: "swing" — pendulum oscillation (hanging sign, pendulum, chandelier, swinging door, clock hands)
+- type: "orbit" — orbit around its original position (electrons, moons, orbiting debris, satellites)
+
+Animation parameters:
+- speed: number (default 1, higher = faster. 0.5 = slow and dreamy, 2 = energetic)
+- axis: "x" | "y" | "z" (default "y". Which axis the animation acts on)
+- amplitude: number (default 0.5. Bob height in meters, swing angle in radians, orbit radius in meters)
+
+Use animations PURPOSEFULLY — animate the parts that SHOULD move while keeping structural elements static. A windmill: blades rotate, walls don't. A solar system: planets orbit, the sun pulses. A campfire: flames bob and pulse, logs stay still. Animate 2-8 primitives per scene.
+
+Animation field goes on the object: { "type": "box", "position": [0,0.5,0], "scale": [1,1,1], "color": "#888", "animation": { "type": "rotate", "speed": 1, "axis": "y" } }
+`
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // VALIDATION — make sure LLM output is a real scene
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const VALID_TYPES: PrimitiveType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'capsule']
+const VALID_TYPES: PrimitiveType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'capsule', 'text']
+const VALID_ANIM_TYPES: CraftAnimationType[] = ['rotate', 'bob', 'pulse', 'swing', 'orbit']
+const VALID_AXES = ['x', 'y', 'z'] as const
+
+function validateAnimation(raw: unknown): CraftAnimation | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const a = raw as Record<string, unknown>
+  if (typeof a.type !== 'string' || !VALID_ANIM_TYPES.includes(a.type as CraftAnimationType)) return undefined
+  return {
+    type: a.type as CraftAnimationType,
+    ...(typeof a.speed === 'number' && { speed: Math.max(0.1, Math.min(10, a.speed)) }),
+    ...(typeof a.axis === 'string' && VALID_AXES.includes(a.axis as typeof VALID_AXES[number]) && { axis: a.axis as 'x' | 'y' | 'z' }),
+    ...(typeof a.amplitude === 'number' && { amplitude: Math.max(0.01, Math.min(20, a.amplitude)) }),
+  }
+}
 
 function validateScene(raw: unknown): { valid: boolean; scene?: { name: string; objects: CraftedPrimitive[] }; error?: string } {
   if (!raw || typeof raw !== 'object') return { valid: false, error: 'Response is not an object' }
@@ -121,6 +161,8 @@ function validateScene(raw: unknown): { valid: boolean; scene?: { name: string; 
 
     const color = typeof o.color === 'string' && o.color.startsWith('#') ? o.color : '#888888'
 
+    const animation = validateAnimation(o.animation)
+
     validObjects.push({
       type: type as PrimitiveType,
       position,
@@ -132,6 +174,12 @@ function validateScene(raw: unknown): { valid: boolean; scene?: { name: string; 
       ...(typeof o.emissive === 'string' && o.emissive.startsWith('#') && { emissive: o.emissive }),
       ...(typeof o.emissiveIntensity === 'number' && { emissiveIntensity: Math.max(0, Math.min(5, o.emissiveIntensity)) }),
       ...(typeof o.opacity === 'number' && { opacity: Math.max(0, Math.min(1, o.opacity)) }),
+      ...(animation && { animation }),
+      // Text-specific fields
+      ...(type === 'text' && typeof o.text === 'string' && { text: o.text.slice(0, 500) }),
+      ...(type === 'text' && typeof o.fontSize === 'number' && { fontSize: Math.max(0.1, Math.min(20, o.fontSize)) }),
+      ...(type === 'text' && typeof o.anchorX === 'string' && ['left', 'center', 'right'].includes(o.anchorX) && { anchorX: o.anchorX as 'left' | 'center' | 'right' }),
+      ...(type === 'text' && typeof o.anchorY === 'string' && ['top', 'middle', 'bottom'].includes(o.anchorY) && { anchorY: o.anchorY as 'top' | 'middle' | 'bottom' }),
     })
   }
 
@@ -163,7 +211,7 @@ function validateScene(raw: unknown): { valid: boolean; scene?: { name: string; 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { prompt, model: requestedModel } = body
+    const { prompt, model: requestedModel, animated } = body
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
@@ -173,20 +221,16 @@ export async function POST(request: NextRequest) {
     }
 
     // ░▒▓ AUTH + CREDIT CHECK — crafting costs a fraction of a credit ▓▒░
-    const creditCost = POST_PROCESS_COSTS.craft ?? 0.05
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    {
-      const sb = getServerSupabase()
-      const { data: profile } = await sb.from('profiles').select('credits').eq('id', session.user.id).single()
-      const currentCredits = profile?.credits ?? 0
-      if (currentCredits < creditCost) {
-        return NextResponse.json({ error: 'Insufficient credits', credits: currentCredits, required: creditCost }, { status: 402 })
+    const creditCost = await getPrice('craft')
+    if (creditCost > 0) {
+      const result = await deductCredits(session.user.id, creditCost)
+      if (!result.success) {
+        return NextResponse.json({ error: 'Insufficient credits', credits: result.newBalance, required: creditCost }, { status: 402 })
       }
-      // Deduct (fire-and-forget — craft is cheap, don't block on it)
-      sb.from('profiles').update({ credits: Math.round((currentCredits - creditCost) * 100) / 100 }).eq('id', session.user.id).gte('credits', creditCost).then(() => {})
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY
@@ -195,6 +239,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Call OpenRouter → Claude for scene generation
+    // Conditionally include animation instructions based on user toggle
+    const systemPrompt = animated
+      ? CRAFT_SYSTEM_PROMPT + CRAFT_ANIMATION_ADDON
+      : CRAFT_SYSTEM_PROMPT + '\n\nIMPORTANT: Do NOT add any "animation" fields. All objects must be completely static.'
+
     const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -206,7 +255,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: (typeof requestedModel === 'string' && ALLOWED_MODELS.includes(requestedModel)) ? requestedModel : DEFAULT_MODEL,
         messages: [
-          { role: 'system', content: CRAFT_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: `Design a 3D scene for: ${prompt.trim()}` },
         ],
         temperature: 0.7,

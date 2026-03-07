@@ -24,6 +24,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
 import type { ConjuredAsset } from '../../lib/conjure/types'
 import { useOasisStore } from '../../store/oasisStore'
 import { extractModelStats } from './ModelPreview'
+import { isLibraryAnimation, getLibraryAnimId, loadAnimationClip, getCachedClip, LIB_PREFIX, retargetClip } from '../../lib/forge/animation-library'
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -174,22 +175,72 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
     }
   }, [animations])
 
+  // ░▒▓ Detect rigged character + collect bone names for retargeting ▓▒░
+  const { isRigged, boneNames, skeletonKey } = useMemo(() => {
+    const names: string[] = []
+    clonedScene.traverse(child => {
+      if ((child as THREE.Bone).isBone) names.push(child.name)
+    })
+    // skeletonKey = fingerprint of this naming convention (first 3 bone names sorted)
+    // Used as cache key for retargeted clips
+    const key = names.length > 0 ? names.slice(0, 3).sort().join(',') : ''
+    if (names.length > 0) {
+      console.log(`[Forge:Object] ${asset.id} bones (first 10):`, names.slice(0, 10), `| skeleton key: "${key}"`)
+    }
+    return { isRigged: names.length > 0, boneNames: names, skeletonKey: key }
+  }, [clonedScene, asset.id])
+
   useEffect(() => {
-    if (animations.length === 0) return
+    // Create mixer for baked animations OR rigged characters (library animations)
+    if (animations.length === 0 && !isRigged) return
     const mixer = new THREE.AnimationMixer(clonedScene)
     mixerRef.current = mixer
     currentActionRef.current = null
     currentClipRef.current = null
     return () => { mixer.stopAllAction(); mixerRef.current = null }
-  }, [clonedScene, animations])
+  }, [clonedScene, animations, isRigged])
 
   // ░▒▓ Animation state machine — reacts to movement + behavior config ▓▒░
+  // Supports both baked-in clips AND external library animations (lib: prefix)
   const animConfig = useOasisStore(s => s.behaviors[asset.id]?.animation)
   const isMoving = useOasisStore(s => !!s.behaviors[asset.id]?.moveTarget)
+  const [externalClip, setExternalClip] = useState<THREE.AnimationClip | null>(null)
+
+  // ░▒▓ Load external library animation when behavior config changes ▓▒░
+  // Also auto-load walk animation for rigged chars (used during RTS movement)
+  const [libWalkClip, setLibWalkClip] = useState<THREE.AnimationClip | null>(null)
+
+  useEffect(() => {
+    const clipName = animConfig?.clipName
+    if (!clipName || !isLibraryAnimation(clipName)) {
+      setExternalClip(null)
+      return
+    }
+    const animId = getLibraryAnimId(clipName)
+    const cached = getCachedClip(animId)
+    if (cached) {
+      setExternalClip(cached)
+    } else {
+      loadAnimationClip(animId).then(clip => {
+        if (clip) setExternalClip(clip)
+      })
+    }
+  }, [animConfig?.clipName])
+
+  // Pre-load library walk for rigged chars without baked walk clip
+  useEffect(() => {
+    if (isRigged && !walkClip) {
+      loadAnimationClip('walk').then(clip => {
+        if (clip) setLibWalkClip(clip)
+      })
+    }
+  }, [isRigged, walkClip])
 
   useEffect(() => {
     const mixer = mixerRef.current
-    if (!mixer || animations.length === 0) return
+    if (!mixer) return
+    // Need either baked animations or an external clip
+    if (animations.length === 0 && !externalClip) return
 
     // Priority 1: Explicit behavior config from ObjectInspector
     let clipName = animConfig?.clipName || null
@@ -197,9 +248,15 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
     let speed = animConfig?.speed || 1
 
     // Priority 2: Walk animation during RTS move-to
-    if (!clipName && isMoving && walkClip) {
-      clipName = walkClip
-      loop = 'repeat'
+    // Use baked walk clip if available, otherwise use library walk for rigged chars
+    if (!clipName && isMoving) {
+      if (walkClip) {
+        clipName = walkClip
+        loop = 'repeat'
+      } else if (libWalkClip) {
+        clipName = libWalkClip.name  // lib:walk
+        loop = 'repeat'
+      }
     }
 
     // Priority 3: Idle fallback — always return to idle when not moving
@@ -234,11 +291,27 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
       return
     }
 
-    const clip = animations.find(a => a.name === clipName)
-    if (!clip) return
-
     // Skip if already playing the same clip
     if (currentClipRef.current === clipName) return
+
+    // Resolve clip: library animation (lib: prefix) or baked-in
+    let clip: THREE.AnimationClip | undefined
+    if (isLibraryAnimation(clipName)) {
+      // Check explicit external clip first, then pre-loaded library walk
+      clip = externalClip || undefined
+      if (!clip && clipName === libWalkClip?.name) {
+        clip = libWalkClip
+      }
+      if (!clip) return  // Still loading
+      // ░▒▓ RETARGET — remap bone names to match this character's skeleton ▓▒░
+      // Meshy uses "Hips", Tripo uses "mixamorigHips", library clips use "mixamorigHips"
+      if (boneNames.length > 0 && skeletonKey) {
+        clip = retargetClip(clip, boneNames, skeletonKey)
+      }
+    } else {
+      clip = animations.find(a => a.name === clipName)
+    }
+    if (!clip) return
 
     const newAction = mixer.clipAction(clip)
     if (currentActionRef.current) {
@@ -257,7 +330,7 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
 
     currentActionRef.current = newAction
     currentClipRef.current = clipName
-  }, [animConfig?.clipName, animConfig?.loop, animConfig?.speed, animations, isMoving, idleClip, walkClip])
+  }, [animConfig?.clipName, animConfig?.loop, animConfig?.speed, animations, isMoving, idleClip, walkClip, externalClip, libWalkClip, boneNames, skeletonKey])
 
   // ░▒▓ Dispose cloned geometry + materials on unmount — stop VRAM leaks ▓▒░
   useEffect(() => {
@@ -296,12 +369,41 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
   }, [asset.id, asset.metadata, meshStats, triangleCount, glbUrl, updateConjuredAsset, setObjectMeshStats])
 
   // ░▒▓ Bounding box for raycast proxy — 12 tris instead of 100k+ ▓▒░
-  // Minimum dimension enforced: SkinnedMesh bind pose can produce degenerate boxes
+  // SkinnedMesh "bind pose" problem: vertices are stored in their REST position
+  // (T-pose/A-pose). Box3.setFromObject reads those raw vertex positions, which
+  // may collapse to a tiny/flat box because the skeleton hasn't posed them yet.
+  // Fix: also compute bounds from BONE WORLD POSITIONS (the skeleton itself)
+  // and union both. Bones always have valid transforms even before animation starts.
   const bounds = useMemo(() => {
+    // Step 1: Update all skeletons so bone matrices are current
+    clonedScene.traverse(child => {
+      if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+        child.skeleton.update()
+      }
+    })
+
+    // Step 2: Standard geometry-based bounds
     const box = new THREE.Box3().setFromObject(clonedScene)
+
+    // Step 3: Union with bone positions — skeleton always has valid world transforms
+    if (isRigged) {
+      const boneBox = new THREE.Box3()
+      const bonePos = new THREE.Vector3()
+      clonedScene.traverse(child => {
+        if ((child as THREE.Bone).isBone) {
+          child.getWorldPosition(bonePos)
+          boneBox.expandByPoint(bonePos)
+        }
+      })
+      // Only use bone box if it has valid extent
+      if (!boneBox.isEmpty()) {
+        box.union(boneBox)
+      }
+    }
+
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
-    // Guard against degenerate bounds — SkinnedMesh bind pose can be zero on some axes
+    // Guard against degenerate bounds — last resort minimum
     if (size.x < MIN_PROXY_DIM) size.x = MIN_PROXY_DIM
     if (size.y < MIN_PROXY_DIM) size.y = MIN_PROXY_DIM
     if (size.z < MIN_PROXY_DIM) size.z = MIN_PROXY_DIM
@@ -311,7 +413,7 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
     if (!isFinite(center.z)) center.z = 0
     console.log(`[Forge:Proxy] ${asset.id} (${asset.tier}) bounds: size=[${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)}] center=[${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}]`)
     return { size, center }
-  }, [clonedScene, asset.id, asset.tier])
+  }, [clonedScene, asset.id, asset.tier, isRigged])
 
   // ░▒▓ Direct click handler — bypasses R3F event bubbling for reliability ▓▒░
   // Event bubbling from proxy mesh → SelectableWrapper group was unreliable for
