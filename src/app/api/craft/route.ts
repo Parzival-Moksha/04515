@@ -68,13 +68,14 @@ Color & material guide:
 - Neon/glow: any bright color as emissive, emissiveIntensity 1-3
 - Fabric: roughness 0.9-1.0, metalness 0
 
-TEXT PRIMITIVES — 3D floating text rendered in the world:
+TEXT PRIMITIVES — Real extruded 3D text rendered in the world:
 When type is "text", add these fields:
-- text: string — the actual text content. Can be multi-line with \\n
+- text: string — the actual text content. Keep it SHORT (1-3 words per primitive). For longer text, use multiple text primitives.
 - fontSize: number — size in world units (default 1). 0.3 for labels, 1-2 for signs, 3+ for titles.
-Use text for: signs, labels, neon text, floating titles, speech bubbles, UI elements, nameplates, price tags, billboards.
-Text renders as SDF (signed distance field) — it looks crisp at any size and angle. Combine with emissive + emissiveIntensity for neon/glowing text effects.
-Example: { "type": "text", "text": "WELCOME", "position": [0, 3, 0], "scale": [1,1,1], "fontSize": 2, "color": "#FF00FF", "emissive": "#FF00FF", "emissiveIntensity": 2 }
+Text is TRUE 3D with depth/extrusion and beveled edges — it looks solid from all angles. Combine with emissive + emissiveIntensity for neon/glowing text, or metalness for chrome/gold lettering.
+Use text for: signs, labels, neon text, floating titles, nameplates, price tags, billboards, monument inscriptions, shop signs, trophies, game HUD elements.
+Example: { "type": "text", "text": "OASIS", "position": [0, 3, 0], "scale": [1,1,1], "fontSize": 2, "color": "#FF00FF", "emissive": "#FF00FF", "emissiveIntensity": 2 }
+Example gold sign: { "type": "text", "text": "WELCOME", "position": [0, 2.5, -3], "scale": [1,1,1], "fontSize": 1.5, "color": "#FFD700", "metalness": 0.9, "roughness": 0.1 }
 
 Target 8-50 primitives per scene. Simple objects need 8-15. Complex scenes (buildings, vehicles, landscapes) use 25-50. Each primitive should serve a purpose.
 

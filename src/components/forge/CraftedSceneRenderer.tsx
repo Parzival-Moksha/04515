@@ -8,7 +8,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html, Text } from '@react-three/drei'
+import { Html, Text3D, Center } from '@react-three/drei'
 import * as THREE from 'three'
 import type { CraftedScene, CraftedPrimitive } from '../../lib/conjure/types'
 import { useOasisStore } from '../../store/oasisStore'
@@ -97,12 +97,19 @@ function useAnimation(ref: React.RefObject<THREE.Object3D | null>, primitive: Cr
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEXT PRIMITIVE — 3D SDF text via troika (drei wraps it)
+// TEXT PRIMITIVE — Extruded 3D text via drei Text3D (three.js TextGeometry)
 // ═══════════════════════════════════════════════════════════════════════════════
+
+const TEXT3D_FONT = '/fonts/helvetiker_regular.typeface.json'
 
 function CraftedTextMesh({ primitive }: { primitive: CraftedPrimitive }) {
   const groupRef = useRef<THREE.Group>(null)
+  const hasOpacity = primitive.opacity !== undefined && primitive.opacity < 1
   useAnimation(groupRef, primitive)
+
+  const fontSize = primitive.fontSize ?? 1
+  // Extrusion depth proportional to font size — looks solid without being comically thick
+  const depth = fontSize * 0.2
 
   return (
     <group
@@ -111,28 +118,31 @@ function CraftedTextMesh({ primitive }: { primitive: CraftedPrimitive }) {
       rotation={primitive.rotation || [0, 0, 0]}
       scale={primitive.scale}
     >
-      <Text
-        fontSize={primitive.fontSize ?? 1}
-        color={primitive.color}
-        anchorX={primitive.anchorX ?? 'center'}
-        anchorY={primitive.anchorY ?? 'middle'}
-        outlineWidth={0.02}
-        outlineColor="#000000"
-        // @ts-expect-error drei Text material props
-        emissive={primitive.emissive || undefined}
-        emissiveIntensity={primitive.emissiveIntensity ?? 0}
-      >
-        {primitive.text || '?'}
-        <meshStandardMaterial
-          color={primitive.color}
-          emissive={primitive.emissive || '#000000'}
-          emissiveIntensity={primitive.emissiveIntensity ?? 0}
-          metalness={primitive.metalness ?? 0}
-          roughness={primitive.roughness ?? 0.5}
-          transparent={primitive.opacity !== undefined && primitive.opacity < 1}
-          opacity={primitive.opacity ?? 1}
-        />
-      </Text>
+      <Center>
+        <Text3D
+          font={TEXT3D_FONT}
+          size={fontSize}
+          height={depth}
+          bevelEnabled
+          bevelThickness={fontSize * 0.02}
+          bevelSize={fontSize * 0.01}
+          bevelSegments={3}
+          castShadow={!hasOpacity}
+          receiveShadow
+        >
+          {primitive.text || '?'}
+          <meshStandardMaterial
+            color={primitive.color}
+            emissive={primitive.emissive || '#000000'}
+            emissiveIntensity={primitive.emissiveIntensity ?? 0}
+            metalness={primitive.metalness ?? 0}
+            roughness={primitive.roughness ?? 0.5}
+            transparent={hasOpacity}
+            opacity={primitive.opacity ?? 1}
+            depthWrite={!hasOpacity}
+          />
+        </Text3D>
+      </Center>
     </group>
   )
 }

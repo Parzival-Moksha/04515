@@ -15,8 +15,8 @@ const DEFAULT_PRICING: Record<string, number> = {
   post_remesh: 0.25,
   post_rig: 0.75,
   post_animate: 0.25,
-  craft: 0,      // LLM craft — free by default (pennies per call via OpenRouter)
-  terrain: 0,    // LLM terrain — free by default
+  craft: 0.05,   // LLM craft — fallback only; real price set in /admin dashboard
+  terrain: 0.05, // LLM terrain — fallback only; real price set in /admin dashboard
 }
 
 // Cache pricing for 60s to avoid hammering DB on every request
