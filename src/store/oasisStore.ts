@@ -12,7 +12,8 @@ import {
   getWorldRegistry, getActiveWorldId, setActiveWorldId,
   createWorld, deleteWorld, exportWorld, importWorld,
   migrateIfNeeded, cancelPendingSave,
-  type WorldMeta,
+  loadPublicWorld,
+  type WorldMeta, type PublicWorldResult,
 } from '../lib/forge/world-persistence'
 import { addToSceneLibrary, getSceneLibrary, removeFromSceneLibrary } from '../lib/forge/scene-library'
 import { awardXp } from '../hooks/useXp'
@@ -150,6 +151,13 @@ interface OasisState {
   activeWorldId: string
   worldRegistry: WorldMeta[]
 
+  // ─═̷─═̷─🧑 AVATAR — RPM 3D avatar ─═̷─═̷─🧑
+  avatar3dUrl: string | null
+
+  // ─═̷─═̷─👁️ VIEW MODE — read-only access to other users' worlds ─═̷─═̷─👁️
+  isViewMode: boolean
+  viewingWorldMeta: { name: string; icon: string; creator_name?: string; creator_avatar?: string } | null
+
   // ─═̷─═̷─⚙️ SETTINGS ACTIONS ─═̷─═̷─⚙️
   setFpsCounterEnabled: (enabled: boolean) => void
   setFpsCounterFontSize: (size: number) => void
@@ -235,6 +243,9 @@ interface OasisState {
   exportCurrentWorld: () => Promise<string | null>
   importWorldFromJson: (json: string) => Promise<string | null>  // returns new world id or null
   initWorlds: () => Promise<void>                                // hydrate registry + scene library on mount
+  setAvatar3dUrl: (url: string | null) => void
+  enterViewMode: (worldId: string) => void                       // load a public world read-only
+  exitViewMode: () => void                                       // return to user's own world
 
   // ─═̷─═̷─⏪ UNDO/REDO ─═̷─═̷─⏪
   undoStack: UndoCommand[]
@@ -307,6 +318,13 @@ export const useOasisStore = create<OasisState>((set, get) => {
   worldSkyBackground: 'night007',
   activeWorldId: isBrowser ? getActiveWorldId() : 'forge-default',
   worldRegistry: [],
+
+  // ─═̷─═̷─🧑 AVATAR ─═̷─═̷─🧑
+  avatar3dUrl: null,
+
+  // ─═̷─═̷─👁️ VIEW MODE ─═̷─═̷─👁️
+  isViewMode: false,
+  viewingWorldMeta: null,
 
   // ─═̷─═̷─⏪ UNDO/REDO STATE ─═̷─═̷─⏪
   undoStack: [],
@@ -699,11 +717,14 @@ export const useOasisStore = create<OasisState>((set, get) => {
   },
 
   loadWorldState: () => {
+    if (get().isViewMode) return // don't overwrite viewed world with user's own data
+
     // Helper: seed default lights with proper IDs (for fresh/old worlds)
     const seedDefaultLights = (): WorldLight[] =>
       DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
 
     loadWorld().then(world => {
+      if (get().isViewMode) return // check again after async — view mode may have been entered during fetch
       if (!world) {
         set({ terrainParams: null, groundPresetId: 'none', groundTiles: {}, craftedScenes: [], worldConjuredAssetIds: [], placedCatalogAssets: [], transforms: {}, behaviors: {}, worldLights: seedDefaultLights(), worldSkyBackground: 'night007' })
         return
@@ -727,12 +748,17 @@ export const useOasisStore = create<OasisState>((set, get) => {
     })
   },
   saveWorldState: () => {
+    if (get().isViewMode) return // don't save someone else's world
     const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground } = get()
     debouncedSaveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground })
   },
 
   // ─═̷─═̷─🌍 MULTI-WORLD ACTIONS ─═̷─═̷─🌍
   switchWorld: (worldId) => {
+    // Exit view mode if active — user clicked one of their own worlds
+    if (get().isViewMode) {
+      set({ isViewMode: false, viewingWorldMeta: null })
+    }
     // ░▒▓ RACE CONDITION FIX — kill any pending debounced saves from the OLD world ▓▒░
     // Without this, a stale save timer can fire AFTER the new world loads,
     // overwriting the new world's lights/sky with the old world's stale state.
@@ -863,6 +889,58 @@ export const useOasisStore = create<OasisState>((set, get) => {
 
     // Load active world state
     get().loadWorldState()
+  },
+
+  setAvatar3dUrl: (url) => set({ avatar3dUrl: url }),
+
+  // ─═̷─═̷─👁️ VIEW MODE — peek into someone else's world (read-only) ─═̷─═̷─👁️
+  enterViewMode: (worldId) => {
+    // Save current world before entering view mode (if not already viewing)
+    if (!get().isViewMode) {
+      cancelPendingSave()
+      const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
+      saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+    }
+
+    // Set view mode flag IMMEDIATELY — prevents initWorlds/loadWorldState from overwriting
+    set({ isViewMode: true, viewingWorldMeta: { name: 'Loading...', icon: '⏳' } })
+
+    loadPublicWorld(worldId).then(result => {
+      if (!result) {
+        console.error(`[ViewMode] World ${worldId} not found or not public`)
+        set({ isViewMode: false, viewingWorldMeta: null })
+        return
+      }
+      const { state, meta } = result
+      const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
+      const lights = state.lights !== undefined ? state.lights : defaultLights
+      set({
+        viewingWorldMeta: { name: meta.name, icon: meta.icon, creator_name: meta.creator_name, creator_avatar: meta.creator_avatar },
+        terrainParams: state.terrain || null,
+        groundPresetId: state.groundPresetId || 'none',
+        groundTiles: state.groundTiles || {},
+        craftedScenes: state.craftedScenes || [],
+        worldConjuredAssetIds: state.conjuredAssetIds || [],
+        placedCatalogAssets: state.catalogPlacements || [],
+        transforms: state.transforms || {},
+        behaviors: state.behaviors || {},
+        worldLights: lights,
+        worldSkyBackground: state.skyBackgroundId || 'night007',
+        selectedObjectId: null,
+        inspectedObjectId: null,
+        paintMode: false,
+        paintBrushPresetId: null,
+      })
+      console.log(`[ViewMode] Entered: "${meta.name}" by ${meta.creator_name || 'unknown'}`)
+    })
+  },
+
+  exitViewMode: () => {
+    if (!get().isViewMode) return
+    set({ isViewMode: false, viewingWorldMeta: null })
+    // Reload user's own active world
+    get().loadWorldState()
+    console.log('[ViewMode] Exited — back to own world')
   },
 
   // ═══════════════════════════════════════════════════════════════════════════════

@@ -16,6 +16,7 @@ import { GroundPlane } from '../forge/GroundPlane'
 import { WorldObjectsRenderer } from '../forge/WorldObjects'
 import { GROUND_PRESETS } from '../../lib/forge/ground-textures'
 import { useThumbnailGenerator } from '../../hooks/useThumbnailGenerator'
+import { UserAvatar3D } from '../forge/UserAvatar3D'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORGE GROUND — shows when no terrain is loaded (the original conjuring circle)
@@ -102,6 +103,8 @@ export function ForgeRealm() {
   const catalogAssets = useOasisStore(s => s.placedCatalogAssets)
   const conjuredAssets = useOasisStore(s => s.conjuredAssets)
   const worldLights = useOasisStore(s => s.worldLights)
+  const avatar3dUrl = useOasisStore(s => s.avatar3dUrl)
+  const isViewMode = useOasisStore(s => s.isViewMode)
 
   // ░▒▓ Background thumbnail gen — renders missing thumbnails offscreen ▓▒░
   useThumbnailGenerator()
@@ -130,6 +133,11 @@ export function ForgeRealm() {
 
       {/* ░▒▓ WORLD OBJECTS — shared renderer for all placed assets ▓▒░ */}
       <WorldObjectsRenderer />
+
+      {/* ░▒▓ USER AVATAR — RPM 3D avatar standing in the world ▓▒░ */}
+      {avatar3dUrl && !isViewMode && (
+        <UserAvatar3D url={avatar3dUrl} position={[0, 0, 3]} />
+      )}
 
       {/* Empty state hint */}
       {isEmpty && (

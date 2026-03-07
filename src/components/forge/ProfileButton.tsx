@@ -9,8 +9,10 @@
 import { useState, useRef, useEffect, useContext, useCallback } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { SettingsContext } from '../scene-lib'
+import { useOasisStore } from '@/store/oasisStore'
 import { FREE_CREDITS, CREDIT_PACKS } from '@/lib/conjure/types'
 import { XP_AWARDS } from '@/lib/xp'
+import { AvatarCreator } from './AvatarCreator'
 
 interface ProfileData {
   credits: number
@@ -26,6 +28,7 @@ interface ProfileData {
   displayName: string
   bio: string | null
   avatar_url: string | null
+  avatar_3d_url: string | null
 }
 
 const XP_ACTION_LABELS = [
@@ -42,7 +45,8 @@ const XP_ACTION_LABELS = [
 export function ProfileButton() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
-  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100, needsOnboarding: true, displayName: 'Wanderer', bio: null, avatar_url: null })
+  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100, needsOnboarding: true, displayName: 'Wanderer', bio: null, avatar_url: null, avatar_3d_url: null })
+  const [showAvatarCreator, setShowAvatarCreator] = useState(false)
   const [showPacks, setShowPacks] = useState(false)
   const [showXpInfo, setShowXpInfo] = useState(false)
   const [buying, setBuying] = useState(false)
@@ -56,12 +60,18 @@ export function ProfileButton() {
   const panelRef = useRef<HTMLDivElement>(null)
   const { settings } = useContext(SettingsContext)
 
+  const setAvatar3dUrl = useOasisStore(s => s.setAvatar3dUrl)
+
   const fetchProfile = useCallback(() => {
     fetch('/api/profile')
       .then(r => r.json())
-      .then(data => setProfile(data))
+      .then(data => {
+        setProfile(data)
+        // Sync 3D avatar URL to store so R3F components can access it
+        if (data.avatar_3d_url) setAvatar3dUrl(data.avatar_3d_url)
+      })
       .catch(() => {})
-  }, [])
+  }, [setAvatar3dUrl])
 
   // Eager fetch on mount to get displayName for avatar button
   useEffect(() => {
@@ -118,6 +128,20 @@ export function ProfileButton() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  const handleAvatarReady = useCallback(async (glbUrl: string) => {
+    try {
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar_3d_url: glbUrl }),
+      })
+      setShowAvatarCreator(false)
+      fetchProfile()
+    } catch (err) {
+      console.error('[Profile] Avatar save failed:', err)
+    }
+  }, [fetchProfile])
 
   if (!session?.user) return null
 
@@ -377,6 +401,16 @@ export function ProfileButton() {
           {/* Menu items */}
           <div className="p-2">
             <button
+              onClick={() => { setShowAvatarCreator(true); setIsOpen(false) }}
+              className="w-full text-left px-3 py-2 rounded text-sm transition-colors cursor-pointer"
+              style={{
+                color: profile.avatar_3d_url ? '#A855F7' : '#60A5FA',
+                background: profile.avatar_3d_url ? 'rgba(168,85,247,0.08)' : 'transparent',
+              }}
+            >
+              {profile.avatar_3d_url ? '🧑 Edit 3D Avatar' : '✨ Create 3D Avatar'}
+            </button>
+            <button
               onClick={() => { window.open('/explore', '_blank'); setIsOpen(false) }}
               className="w-full text-left px-3 py-2 rounded text-sm text-purple-300 hover:bg-purple-500/10 transition-colors cursor-pointer"
             >
@@ -396,6 +430,13 @@ export function ProfileButton() {
             </button>
           </div>
         </div>
+      )}
+      {/* RPM Avatar Creator overlay */}
+      {showAvatarCreator && (
+        <AvatarCreator
+          onAvatarReady={handleAvatarReady}
+          onClose={() => setShowAvatarCreator(false)}
+        />
       )}
     </div>
   )

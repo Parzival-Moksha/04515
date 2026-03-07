@@ -14,7 +14,7 @@ const PROFILE_DEFAULTS = {
   credits: FREE_CREDITS, xp: 0, level: 1, aura: 0,
   wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░',
   levelProgress: 0, xpToNext: 100, needsOnboarding: true,
-  displayName: 'Wanderer', bio: null, avatar_url: null,
+  displayName: 'Wanderer', bio: null, avatar_url: null, avatar_3d_url: null,
 }
 
 export async function GET() {
@@ -26,7 +26,7 @@ export async function GET() {
 
     const { data, error } = await getServerSupabase()
       .from('profiles')
-      .select('credits, xp, level, aura, wallet_address, last_login_date, display_name, bio, avatar_url, name')
+      .select('credits, xp, level, aura, wallet_address, last_login_date, display_name, bio, avatar_url, avatar_3d_url, name')
       .eq('id', session.user.id)
       .single()
 
@@ -61,6 +61,7 @@ export async function GET() {
       displayName: data.display_name || data.name || 'Wanderer',
       bio: data.bio || null,
       avatar_url: data.avatar_url,
+      avatar_3d_url: data.avatar_3d_url || null,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -89,6 +90,18 @@ export async function PATCH(request: Request) {
 
     if (body.bio !== undefined) {
       updates.bio = String(body.bio).trim().slice(0, 200) || null
+    }
+
+    if (body.avatar_3d_url !== undefined) {
+      // Validate it's a Ready Player Me URL or null (to clear)
+      const url = body.avatar_3d_url
+      if (url === null || url === '') {
+        updates.avatar_3d_url = null
+      } else if (typeof url === 'string' && url.startsWith('https://models.readyplayer.me/')) {
+        updates.avatar_3d_url = url.slice(0, 500)
+      } else {
+        return NextResponse.json({ error: 'Invalid avatar URL' }, { status: 400 })
+      }
     }
 
     const { error } = await getServerSupabase()
