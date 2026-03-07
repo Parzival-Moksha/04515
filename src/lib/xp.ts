@@ -37,6 +37,7 @@ export const XP_AWARDS = {
 
   // Meta
   SUBMIT_FEEDBACK: 10,       // Anorak: bug report or feature request
+  VIBECODE_REPORT: 100,      // Anorak vibecode: LLM-assisted deep report
 } as const
 
 export type XpAction = keyof typeof XP_AWARDS
