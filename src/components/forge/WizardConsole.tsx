@@ -21,6 +21,9 @@ import type { AssetDefinition } from '../scene-lib/types'
 import { awardXp } from '../../hooks/useXp'
 import { ModelPreviewPanel, CraftedPreviewPanel } from './ModelPreview'
 import { generateSingleCraftedThumbnail, useCraftedThumbnailGenerator, useCatalogThumbnailGenerator } from '../../hooks/useThumbnailGenerator'
+import { usePricing, getConjurePriceKey } from '../../hooks/usePricing'
+import { extractPartialCraftData } from '../../lib/craft-stream'
+import { addToSceneLibrary, getSceneLibrary } from '../../lib/forge/scene-library'
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -161,7 +164,7 @@ function LightTooltipWrap({ type, children, className }: { type: string; childre
 // GALLERY ITEM — Each conjured asset in the grid
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture, onRemesh, onRig, onRename }: {
+function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture, onRemesh, onRig, onRename, pricing }: {
   asset: ConjuredAsset
   onDelete: (id: string) => void
   isInWorld: boolean
@@ -171,6 +174,7 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
   onRemesh?: (id: string, quality: RemeshQuality) => void
   onRig?: (id: string) => void
   onRename?: (id: string, name: string) => void
+  pricing?: Record<string, number>
 }) {
   const provider = PROVIDERS.find(p => p.name === asset.provider)
   const isActive = !['ready', 'failed'].includes(asset.status)
@@ -326,9 +330,9 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
               <button
                 onClick={(e) => { e.stopPropagation(); onTexture(asset.id) }}
                 className="text-[10px] py-0.5 px-1.5 rounded border transition-colors font-mono text-purple-400/80 border-purple-500/20 hover:text-purple-300 hover:border-purple-500/40 bg-purple-500/5"
-                title="Add PBR textures to this preview mesh"
+                title={`Add PBR textures (${pricing?.post_texture ?? 0.5} cr)`}
               >
-                Texture
+                Texture <span className="text-[8px] opacity-60">{pricing?.post_texture ?? 0.5}cr</span>
               </button>
             )}
 
@@ -338,9 +342,9 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
                 <button
                   onClick={(e) => { e.stopPropagation(); setRemeshOpen(!remeshOpen) }}
                   className="text-[10px] py-0.5 px-1.5 rounded border transition-colors font-mono text-cyan-400/80 border-cyan-500/20 hover:text-cyan-300 hover:border-cyan-500/40 bg-cyan-500/5"
-                  title="Retopologize for animation or game-readiness"
+                  title={`Retopologize (${pricing?.post_remesh ?? 0.25} cr)`}
                 >
-                  Remesh &#9660;
+                  Remesh <span className="text-[8px] opacity-60">{pricing?.post_remesh ?? 0.25}cr</span> &#9660;
                 </button>
                 {remeshOpen && (
                   <div
@@ -378,9 +382,9 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
                   onRig(asset.id)
                 }}
                 className="text-[10px] py-0.5 px-1.5 rounded border transition-colors font-mono text-amber-400/80 border-amber-500/20 hover:text-amber-300 hover:border-amber-500/40 bg-amber-500/5"
-                title="Auto-rig: add Mixamo skeleton for animations (1 credit). Models >300k faces must be remeshed first."
+                title={`Auto-rig: add Mixamo skeleton (${pricing?.post_rig ?? 0.75} cr). Models >300k faces must be remeshed first.`}
               >
-                &#9760; Rig
+                &#9760; Rig <span className="text-[8px] opacity-60">{pricing?.post_rig ?? 0.75}cr</span>
               </button>
             )}
 
@@ -494,6 +498,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   // ─═̷─ Craft engine ─═̷─
   const craftedScenes = useOasisStore(s => s.craftedScenes)
   const addCraftedScene = useOasisStore(s => s.addCraftedScene)
+  const updateCraftedScene = useOasisStore(s => s.updateCraftedScene)
   const removeCraftedScene = useOasisStore(s => s.removeCraftedScene)
   const sceneLibrary = useOasisStore(s => s.sceneLibrary)
   const placeLibraryScene = useOasisStore(s => s.placeLibraryScene)
@@ -632,6 +637,16 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const imgSelectedProvider = PROVIDERS.find(p => p.name === imgProvider) || PROVIDERS[0]
   const imgSelectedTier = imgSelectedProvider.tiers.find(t => t.id === imgTier) || imgSelectedProvider.tiers[0]
 
+  // ░▒▓ Dynamic pricing from admin dashboard ▓▒░
+  const { pricing } = usePricing()
+  const p = useCallback((key: string, fallback: number = 1) => {
+    return pricing[key] ?? fallback
+  }, [pricing])
+  // Conjure price lookup — e.g. conjure_meshy_refine
+  const conjurePrice = useCallback((prov: string, t: string) => {
+    return p(getConjurePriceKey(prov, t))
+  }, [p])
+
   // ░▒▓ Animation preset is hardcoded — walk is the universal default ▓▒░
   // Meshy: downloads free walk+run GLBs from rig result. Tripo: animate_retarget with 'walk'.
 
@@ -715,7 +730,6 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
     setActiveCrafts(n => n + 1)
     setCraftingState(true, craftPrompt)
     // ░▒▓ WORLD ISOLATION — capture origin world at craft start ▓▒░
-    // If user switches worlds mid-craft, result must land in the ORIGIN world.
     const originWorldId = useOasisStore.getState().activeWorldId
 
     // Build iterative context — include previous scene if exists
@@ -724,8 +738,22 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
       ? `Previous scene "${lastScene.name}" had ${lastScene.objects.length} objects: ${JSON.stringify(lastScene.objects.slice(0, 5))}...\n\nUser wants: ${craftPrompt}`
       : craftPrompt
 
+    // ░▒▓ STREAMING CRAFT — objects materialize one by one as the LLM thinks ▓▒░
+    // 1. Create placeholder scene (triggers VFX, offset, undo)
+    // 2. Stream tokens, parse partial JSON, update scene incrementally
+    // 3. Finalize: library save, thumbnail, XP, world save
+    const sceneId = `craft_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const placeholderScene: CraftedScene = {
+      id: sceneId,
+      name: 'Crafting...',
+      prompt: craftPrompt,
+      objects: [],
+      position: [0, 0, 0],
+      createdAt: new Date().toISOString(),
+    }
+
     try {
-      const res = await fetch(`${OASIS_BASE}/api/craft`, {
+      const res = await fetch(`${OASIS_BASE}/api/craft/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: iterativePrompt, model: craftModel, animated: craftAnimated }),
@@ -736,40 +764,101 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         throw new Error(err.error || `HTTP ${res.status}`)
       }
 
-      const data = await res.json()
-      if (data.scene) {
-        // ░▒▓ WORLD ISOLATION — if user switched worlds mid-craft, save directly to origin
-        // world via server API without touching the UI store. No flicker, no state corruption. ▓▒░
-        const currentWorldId = useOasisStore.getState().activeWorldId
-        if (currentWorldId !== originWorldId) {
-          console.log(`[Forge:Craft] World changed during craft (${originWorldId} → ${currentWorldId}). Saving result to origin world via API.`)
-          try {
-            const { loadWorld, saveWorld } = await import('../../lib/forge/world-persistence')
-            const originState = await loadWorld(originWorldId)
-            if (originState) {
-              const updatedScenes = [...(originState.craftedScenes || []), data.scene as CraftedScene]
-              await saveWorld({ ...originState, craftedScenes: updatedScenes }, originWorldId)
-              console.log(`[Forge:Craft] Scene saved to origin world ${originWorldId}`)
-            }
-          } catch (saveErr) {
-            console.error('[Forge:Craft] Failed to save to origin world:', saveErr)
-          }
-        } else {
-          addCraftedScene(data.scene as CraftedScene)
+      if (!res.body) throw new Error('No stream body')
+
+      // Add placeholder scene to world — VFX plays, position offset calculated
+      addCraftedScene(placeholderScene)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      let lastObjectCount = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        accumulated += decoder.decode(value, { stream: true })
+
+        // Extract complete objects from the partial JSON stream
+        const partial = extractPartialCraftData(accumulated)
+
+        // Update scene name as soon as we parse it
+        if (partial.name && partial.name !== 'Crafting...') {
+          updateCraftedScene(sceneId, { name: partial.name })
         }
-        // ░▒▓ Fire-and-forget thumbnail — darkroom develops the portrait in the background ▓▒░
-        generateSingleCraftedThumbnail(data.scene as CraftedScene).catch(() => {})
-        // ░▒▓ XP — crafting is creation ▓▒░
-        awardXp('CRAFT_SCENE', originWorldId)
-        // Track conversation for iterative mode
-        setCraftHistory(prev => [
-          ...prev,
-          { role: 'user', content: craftPrompt },
-          { role: 'assistant', content: `Created "${data.scene.name}" with ${data.scene.objects.length} primitives` },
-        ])
+
+        // New objects found — update the scene so they materialize in the 3D view
+        if (partial.objects.length > lastObjectCount) {
+          updateCraftedScene(sceneId, { objects: [...partial.objects] })
+          lastObjectCount = partial.objects.length
+        }
       }
+
+      // ░▒▓ FINALIZE — stream complete, do the post-craft housekeeping ▓▒░
+      const finalParsed = extractPartialCraftData(accumulated)
+      const finalScene: CraftedScene = {
+        id: sceneId,
+        name: finalParsed.name || 'Unnamed Scene',
+        prompt: craftPrompt,
+        objects: finalParsed.objects,
+        position: [0, 0, 0],
+        createdAt: placeholderScene.createdAt,
+      }
+
+      if (finalParsed.objects.length === 0) {
+        // LLM returned garbage — remove the placeholder
+        useOasisStore.getState().removeCraftedScene(sceneId)
+        throw new Error('LLM returned no valid objects')
+      }
+
+      // Final update with cleaned data
+      updateCraftedScene(sceneId, { name: finalScene.name, objects: finalScene.objects })
+
+      // ░▒▓ WORLD ISOLATION — if user switched worlds mid-craft ▓▒░
+      const currentWorldId = useOasisStore.getState().activeWorldId
+      if (currentWorldId !== originWorldId) {
+        console.log(`[Forge:Craft:Stream] World changed during craft (${originWorldId} → ${currentWorldId}). Moving result to origin.`)
+        // Remove from current world's store, save to origin via API
+        useOasisStore.getState().removeCraftedScene(sceneId)
+        try {
+          const { loadWorld, saveWorld } = await import('../../lib/forge/world-persistence')
+          const originState = await loadWorld(originWorldId)
+          if (originState) {
+            const updatedScenes = [...(originState.craftedScenes || []), finalScene]
+            await saveWorld({ ...originState, craftedScenes: updatedScenes }, originWorldId)
+          }
+        } catch (saveErr) {
+          console.error('[Forge:Craft:Stream] Failed to save to origin world:', saveErr)
+        }
+      }
+
+      // Update scene library with the FINAL version (not the empty placeholder)
+      addToSceneLibrary(finalScene).then(() =>
+        getSceneLibrary().then(lib => useOasisStore.setState({ sceneLibrary: lib }))
+      )
+      // Thumbnail
+      generateSingleCraftedThumbnail(finalScene).catch(() => {})
+      // XP
+      awardXp('CRAFT_SCENE', originWorldId)
+      // Save world state
+      useOasisStore.getState().saveWorldState()
+      // Track conversation for iterative mode
+      setCraftHistory(prev => [
+        ...prev,
+        { role: 'user', content: craftPrompt },
+        { role: 'assistant', content: `Created "${finalScene.name}" with ${finalScene.objects.length} primitives` },
+      ])
+
+      console.log(`[Forge:Craft:Stream] Done: "${finalScene.name}" — ${finalScene.objects.length} objects streamed in`)
+
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Craft failed')
+      // Clean up placeholder if it exists and has no objects
+      const existing = useOasisStore.getState().craftedScenes.find(s => s.id === sceneId)
+      if (existing && existing.objects.length === 0) {
+        useOasisStore.getState().removeCraftedScene(sceneId)
+      }
     } finally {
       setActiveCrafts(n => {
         const next = n - 1
@@ -777,7 +866,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         return Math.max(0, next)
       })
     }
-  }, [prompt, addCraftedScene, craftedScenes, craftHistory, craftModel, setCraftingState])
+  }, [prompt, addCraftedScene, updateCraftedScene, craftedScenes, craftHistory, craftModel, setCraftingState])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TERRAIN — LLM terrain generation
@@ -1042,9 +1131,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </select>
                   <select value={tier} onChange={(e) => setTier(e.target.value)}
                     className="text-[11px] bg-black/60 border border-gray-700 rounded px-2 py-1 text-gray-300 focus:border-orange-500/50 focus:outline-none cursor-pointer">
-                    {selectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.creditCost} cr)</option>)}
+                    {selectedProvider.tiers.map(t => { const cost = conjurePrice(selectedProvider.name, t.id); return <option key={t.id} value={t.id}>{t.name} ({cost} cr)</option> })}
                   </select>
-                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{selectedTier.estimatedSeconds}s | {selectedTier.creditCost} credit{selectedTier.creditCost !== 1 ? 's' : ''}</span>
+                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{selectedTier.estimatedSeconds}s | {conjurePrice(provider, tier)} cr</span>
                 </div>
 
                 {/* Stuff / Character toggle + auto-pipeline */}
@@ -1063,10 +1152,10 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </div>
                   {characterMode && (
                     <>
-                      <label className="flex items-center gap-1 cursor-pointer" title="Auto-rig after generation completes (1 extra credit)">
+                      <label className="flex items-center gap-1 cursor-pointer" title={`Auto-rig after generation completes (${p('post_rig', 0.75)} cr)`}>
                         <input type="checkbox" checked={autoRig} onChange={(e) => setAutoRig(e.target.checked)}
                           className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-amber-500" />
-                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig (1 credit)</span>
+                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig ({p('post_rig', 0.75)} cr)</span>
                       </label>
                     </>
                   )}
@@ -1080,7 +1169,8 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                     className="flex-1 text-xs bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-orange-500/50 disabled:opacity-50" />
                   <button onClick={handleCast} disabled={!prompt.trim() || isCasting}
                     className="px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed self-end"
-                    style={{ background: `${forgeColor}33`, color: forgeColor, border: `1px solid ${forgeColor}55` }}>
+                    style={{ background: `${forgeColor}33`, color: forgeColor, border: `1px solid ${forgeColor}55` }}
+                    title={`Costs ${conjurePrice(provider, tier)}${autoRig ? ` + ${p('post_rig', 0.75)} rig` : ''} credits`}>
                     {isCasting ? '...' : characterMode ? (autoRig ? '\uD83E\uDDCD\u2192\u2699' : 'Cast \uD83E\uDDCD') : 'Cast \u2728'}
                   </button>
                 </div>
@@ -1144,9 +1234,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </select>
                   <select value={imgTier} onChange={(e) => setImgTier(e.target.value)}
                     className="text-[11px] bg-black/60 border border-gray-700 rounded px-2 py-1 text-gray-300 focus:border-pink-500/50 focus:outline-none cursor-pointer">
-                    {imgSelectedProvider.tiers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.creditCost} cr)</option>)}
+                    {imgSelectedProvider.tiers.map(t => { const cost = conjurePrice(imgSelectedProvider.name, t.id); return <option key={t.id} value={t.id}>{t.name} ({cost} cr)</option> })}
                   </select>
-                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{imgSelectedTier.estimatedSeconds}s | {imgSelectedTier.creditCost} credit{imgSelectedTier.creditCost !== 1 ? 's' : ''}</span>
+                  <span className="text-[9px] text-orange-400/70 font-mono ml-auto">~{imgSelectedTier.estimatedSeconds}s | {conjurePrice(imgProvider, imgTier)} cr</span>
                 </div>
 
                 {/* Stuff / Character toggle + auto-pipeline */}
@@ -1165,10 +1255,10 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                   </div>
                   {imgCharacterMode && (
                     <>
-                      <label className="flex items-center gap-1 cursor-pointer" title="Auto-rig after generation completes (1 extra credit)">
+                      <label className="flex items-center gap-1 cursor-pointer" title={`Auto-rig after generation completes (${p('post_rig', 0.75)} cr)`}>
                         <input type="checkbox" checked={imgAutoRig} onChange={(e) => setImgAutoRig(e.target.checked)}
                           className="w-3 h-3 rounded border-gray-600 bg-black/60 accent-amber-500" />
-                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig (1 credit)</span>
+                        <span className="text-[10px] text-amber-400/70 font-mono">Auto-rig ({p('post_rig', 0.75)} cr)</span>
                       </label>
                     </>
                   )}
@@ -1182,7 +1272,8 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                     className="flex-1 text-xs bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-pink-500/50" />
                   <button onClick={handleImageCast} disabled={!imageUrl.trim() || isCasting}
                     className="px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed self-end"
-                    style={{ background: '#EC489933', color: '#EC4899', border: '1px solid #EC489955' }}>
+                    style={{ background: '#EC489933', color: '#EC4899', border: '1px solid #EC489955' }}
+                    title={`Costs ${conjurePrice(imgProvider, imgTier)}${imgAutoRig ? ` + ${p('post_rig', 0.75)} rig` : ''} credits`}>
                     {isCasting ? '...' : imgCharacterMode ? (imgAutoRig ? '\uD83D\uDCF7\u2192\u2699' : 'Cast \uD83D\uDCF7\uD83E\uDDCD') : 'Cast \uD83D\uDCF7'}
                   </button>
                 </div>
@@ -1251,8 +1342,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
           disabled={!prompt.trim()}
           className="px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed self-end"
           style={{ background: '#3B82F633', color: '#3B82F6', border: '1px solid #3B82F655' }}
+          title={`Costs ${p('craft', 0.05)} credits`}
         >
-          {activeCrafts > 0 ? `Craft \u2699 (${activeCrafts})` : 'Craft \u2699'}
+          {activeCrafts > 0 ? `Craft \u2699 (${activeCrafts})` : `Craft \u2699 ${p('craft', 0.05) > 0 ? `(${p('craft', 0.05)} cr)` : ''}`}
         </button>
       </div>
       )}
@@ -1947,7 +2039,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                       <div className="w-full aspect-square rounded bg-black/40 flex items-center justify-center mb-1 overflow-hidden">
                         <AssetThumb
                           src={`${OASIS_BASE}/thumbs/${asset.id}.jpg`}
-                          fallback={asset.category === 'enemies' ? '\u{1F916}' : asset.category === 'guns' ? '\u{1F52B}' : asset.category === 'pickups' ? '\u{1F48E}' : asset.category === 'character' ? '\u{1F9D1}' : asset.category === 'nature' ? '\u{1F332}' : asset.category === 'props' ? '\u{1F4E6}' : '\u{1F3D7}'}
+                          fallback={asset.category === 'enemies' ? '\u{1F916}' : asset.category === 'guns' ? '\u{1F52B}' : asset.category === 'pickups' ? '\u{1F48E}' : asset.category === 'character' ? '\u{1F9D1}' : asset.category === 'nature' ? '\u{1F332}' : asset.category === 'props' ? '\u{1F4E6}' : asset.category === 'scifi' ? '\u{1F680}' : asset.category === 'fantasy' ? '\u{1F9D9}' : asset.category === 'village' ? '\u{1F3E0}' : asset.category === 'avatar' ? '\u{1F9D1}' : '\u{1F3D7}'}
                           alt={asset.name}
                         />
                       </div>
@@ -2494,6 +2586,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                     }}
                     onRig={(id) => processAsset(id, 'rig').catch((e: Error) => setError(e.message))}
                     onRename={renameAsset}
+                    pricing={pricing}
                   />
                 ))}
               </div>

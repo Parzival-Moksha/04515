@@ -29,7 +29,9 @@ export type { ModelStats } from '../../lib/conjure/types'
 // ░▒▓ Module-level backdrop state — shared across both preview panels ▓▒░
 // Survives panel switches (catalog ↔ crafted) within the same session.
 // Blob URLs are per-session and lightweight — no localStorage bloat.
-let _sharedBackdropUrl: string | null = null
+// Default: oasislogo.jpg — branded panorama backdrop instead of flat gray.
+const DEFAULT_BACKDROP = '/oasislogo.jpg'
+let _sharedBackdropUrl: string | null = DEFAULT_BACKDROP
 const _backdropListeners = new Set<(url: string | null) => void>()
 function setSharedBackdrop(url: string | null) {
   // Revoke old blob URL to prevent memory leak
@@ -264,7 +266,25 @@ export function AutoFramedModel({ path, onAnimationsDetected, onStatsReady, onRe
   onStatsReadyRef.current = onStatsReady
 
   // SkeletonUtils.clone — proper bone/skinned mesh cloning (scene.clone breaks animations)
-  const clonedScene = useMemo(() => SkeletonUtils.clone(gltf.scene) as THREE.Group, [gltf.scene])
+  const clonedScene = useMemo(() => {
+    const clone = SkeletonUtils.clone(gltf.scene) as THREE.Group
+    // Enable vertex colors for Kenney-style models (no textures, color in geometry)
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        if (mesh.geometry.attributes.color) {
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+          mats.forEach((mat) => {
+            if (mat && 'vertexColors' in mat && !mat.vertexColors) {
+              mat.vertexColors = true
+              mat.needsUpdate = true
+            }
+          })
+        }
+      }
+    })
+    return clone
+  }, [gltf.scene])
 
   // Manual mixer — drei's useAnimations captures stale closures, this doesn't
   useEffect(() => {
@@ -614,18 +634,35 @@ export function ModelPreviewPanel({ asset, onBack, onPlace, accentColor = '#38BD
                   e.target.value = '' // reset so same file can be re-selected
                 }}
               />
+              {/* Reset to default backdrop */}
+              {backdropImage && backdropImage !== DEFAULT_BACKDROP && (
+                <button
+                  onClick={() => setBackdropImage(DEFAULT_BACKDROP)}
+                  className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 hover:scale-110"
+                  style={{
+                    background: `${accentColor}30`,
+                    border: `1px solid ${accentColor}60`,
+                    color: accentColor,
+                    fontSize: '12px',
+                  }}
+                  title="Reset to default backdrop"
+                >
+                  {'\u2716'}
+                </button>
+              )}
+              {/* Upload custom backdrop */}
               <button
-                onClick={() => backdropImage ? setBackdropImage(null) : fileInputRef.current?.click()}
+                onClick={() => fileInputRef.current?.click()}
                 className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 hover:scale-110"
                 style={{
-                  background: backdropImage ? `${accentColor}30` : 'rgba(40,40,40,0.8)',
-                  border: `1px solid ${backdropImage ? `${accentColor}60` : 'rgba(80,80,80,0.5)'}`,
-                  color: backdropImage ? accentColor : '#666',
+                  background: 'rgba(40,40,40,0.8)',
+                  border: '1px solid rgba(80,80,80,0.5)',
+                  color: '#666',
                   fontSize: '12px',
                 }}
-                title={backdropImage ? 'Reset to studio gray (click)' : 'Upload custom backdrop image'}
+                title="Upload custom backdrop image"
               >
-                {backdropImage ? '\u2716' : '\u{1F5BC}'}
+                {'\u{1F5BC}'}
               </button>
               {/* Auto-rotate toggle */}
               <button
@@ -816,18 +853,33 @@ export function CraftedPreviewPanel({ scene, onBack, onPlace, accentColor = '#3B
               e.target.value = ''
             }}
           />
+          {backdropImage && backdropImage !== DEFAULT_BACKDROP && (
+            <button
+              onClick={() => setBackdropImage(DEFAULT_BACKDROP)}
+              className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 hover:scale-110"
+              style={{
+                background: `${accentColor}30`,
+                border: `1px solid ${accentColor}60`,
+                color: accentColor,
+                fontSize: '12px',
+              }}
+              title="Reset to default backdrop"
+            >
+              {'\u2716'}
+            </button>
+          )}
           <button
-            onClick={() => backdropImage ? setBackdropImage(null) : fileInputRef.current?.click()}
+            onClick={() => fileInputRef.current?.click()}
             className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 hover:scale-110"
             style={{
-              background: backdropImage ? `${accentColor}30` : 'rgba(40,40,40,0.8)',
-              border: `1px solid ${backdropImage ? `${accentColor}60` : 'rgba(80,80,80,0.5)'}`,
-              color: backdropImage ? accentColor : '#666',
+              background: 'rgba(40,40,40,0.8)',
+              border: '1px solid rgba(80,80,80,0.5)',
+              color: '#666',
               fontSize: '12px',
             }}
-            title={backdropImage ? 'Reset to studio gray' : 'Upload custom backdrop image'}
+            title="Upload custom backdrop image"
           >
-            {backdropImage ? '\u2716' : '\u{1F5BC}'}
+            {'\u{1F5BC}'}
           </button>
           <button
             onClick={() => setAutoRotate(prev => !prev)}

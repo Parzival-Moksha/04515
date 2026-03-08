@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -16,7 +16,7 @@ import { GroundPlane } from '../forge/GroundPlane'
 import { WorldObjectsRenderer } from '../forge/WorldObjects'
 import { GROUND_PRESETS } from '../../lib/forge/ground-textures'
 import { useThumbnailGenerator } from '../../hooks/useThumbnailGenerator'
-import { UserAvatar3D } from '../forge/UserAvatar3D'
+import { VRMAvatar } from '../forge/VRMAvatar'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORGE GROUND — shows when no terrain is loaded (the original conjuring circle)
@@ -134,9 +134,11 @@ export function ForgeRealm() {
       {/* ░▒▓ WORLD OBJECTS — shared renderer for all placed assets ▓▒░ */}
       <WorldObjectsRenderer />
 
-      {/* ░▒▓ USER AVATAR — RPM 3D avatar standing in the world ▓▒░ */}
-      {avatar3dUrl && !isViewMode && (
-        <UserAvatar3D url={avatar3dUrl} position={[0, 0, 3]} />
+      {/* ░▒▓ USER AVATAR — VRM avatar from gallery ▓▒░ */}
+      {avatar3dUrl && !isViewMode && avatar3dUrl.endsWith('.vrm') && (
+        <Suspense fallback={null}>
+          <VRMAvatar url={avatar3dUrl} position={[0, 0, 3]} />
+        </Suspense>
       )}
 
       {/* Empty state hint */}

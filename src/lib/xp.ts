@@ -6,11 +6,13 @@
 // Level 1: 100 XP, Level 10: 15,849 XP, Level 50: ~850K XP
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
+import { getServerSupabase } from './supabase'
+
 // ═══════════════════════════════════════════════════════════════════════════
-// XP AWARDS — what each action earns
+// XP AWARDS — hardcoded defaults, overridable via admin dashboard
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const XP_AWARDS = {
+export const DEFAULT_XP_AWARDS = {
   // Building actions
   PLACE_CATALOG_OBJECT: 5,
   CONJURE_ASSET: 25,
@@ -40,7 +42,46 @@ export const XP_AWARDS = {
   VIBECODE_REPORT: 100,      // Anorak vibecode: LLM-assisted deep report
 } as const
 
-export type XpAction = keyof typeof XP_AWARDS
+// Backwards compat — code that imports XP_AWARDS still works
+export const XP_AWARDS = DEFAULT_XP_AWARDS
+
+export type XpAction = keyof typeof DEFAULT_XP_AWARDS
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DYNAMIC XP CONFIG — from Supabase app_config, 60s cache (mirrors pricing)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let cachedXpAwards: Record<string, number> | null = null
+let xpCacheExpiry = 0
+
+/** Get XP awards with dynamic overrides from admin dashboard */
+export async function getXpAwards(): Promise<Record<string, number>> {
+  if (cachedXpAwards && Date.now() < xpCacheExpiry) return cachedXpAwards
+
+  try {
+    const { data } = await getServerSupabase()
+      .from('app_config')
+      .select('value')
+      .eq('key', 'xp_awards')
+      .single()
+
+    if (data?.value && typeof data.value === 'object') {
+      cachedXpAwards = { ...DEFAULT_XP_AWARDS, ...(data.value as Record<string, number>) }
+      xpCacheExpiry = Date.now() + 60_000
+      return cachedXpAwards
+    }
+  } catch {
+    // DB unavailable — use defaults
+  }
+
+  return { ...DEFAULT_XP_AWARDS }
+}
+
+/** Get XP for a specific action, dynamically */
+export async function getXpForAction(action: string): Promise<number> {
+  const awards = await getXpAwards()
+  return awards[action] ?? 0
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LEVEL CALCULATION — polynomial curve, exponent 2.2

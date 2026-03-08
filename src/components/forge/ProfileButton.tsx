@@ -12,7 +12,7 @@ import { SettingsContext } from '../scene-lib'
 import { useOasisStore } from '@/store/oasisStore'
 import { FREE_CREDITS, CREDIT_PACKS } from '@/lib/conjure/types'
 import { XP_AWARDS } from '@/lib/xp'
-import { AvatarCreator } from './AvatarCreator'
+import { AvatarGallery } from './AvatarGallery'
 
 interface ProfileData {
   credits: number
@@ -29,6 +29,7 @@ interface ProfileData {
   bio: string | null
   avatar_url: string | null
   avatar_3d_url: string | null
+  lastLoginDate: string | null
 }
 
 const XP_ACTION_LABELS = [
@@ -45,8 +46,8 @@ const XP_ACTION_LABELS = [
 export function ProfileButton() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
-  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100, needsOnboarding: true, displayName: 'Wanderer', bio: null, avatar_url: null, avatar_3d_url: null })
-  const [showAvatarCreator, setShowAvatarCreator] = useState(false)
+  const [profile, setProfile] = useState<ProfileData>({ credits: FREE_CREDITS, xp: 0, level: 1, aura: 0, wallet_address: null, levelTitle: 'Apprentice', levelBadge: '░', levelProgress: 0, xpToNext: 100, needsOnboarding: true, displayName: 'Wanderer', bio: null, avatar_url: null, avatar_3d_url: null, lastLoginDate: null })
+  const [showAvatarGallery, setShowAvatarGallery] = useState(false)
   const [showPacks, setShowPacks] = useState(false)
   const [showXpInfo, setShowXpInfo] = useState(false)
   const [buying, setBuying] = useState(false)
@@ -61,14 +62,40 @@ export function ProfileButton() {
   const { settings } = useContext(SettingsContext)
 
   const setAvatar3dUrl = useOasisStore(s => s.setAvatar3dUrl)
+  const [dailyBonusToast, setDailyBonusToast] = useState<string | null>(null)
+  const dailyBonusTriedRef = useRef(false)
 
   const fetchProfile = useCallback(() => {
     fetch('/api/profile')
       .then(r => r.json())
       .then(data => {
         setProfile(data)
-        // Sync 3D avatar URL to store so R3F components can access it
         if (data.avatar_3d_url) setAvatar3dUrl(data.avatar_3d_url)
+
+        // Auto-claim daily login bonus on first successful fetch
+        if (!dailyBonusTriedRef.current) {
+          const today = new Date().toISOString().split('T')[0]
+          if (data.lastLoginDate !== today) {
+            dailyBonusTriedRef.current = true
+            fetch('/api/xp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'DAILY_LOGIN' }),
+            })
+              .then(r => r.json())
+              .then(bonus => {
+                if (bonus.xp && bonus.xp > 0) {
+                  setDailyBonusToast(`+${bonus.xp} XP Daily Bonus!${bonus.leveledUp ? ` Level up! Lv.${bonus.level}` : ''}`)
+                  // Re-fetch profile to reflect new XP
+                  fetch('/api/profile').then(r => r.json()).then(d => setProfile(d)).catch(() => {})
+                  setTimeout(() => setDailyBonusToast(null), 4000)
+                }
+              })
+              .catch(() => {})
+          } else {
+            dailyBonusTriedRef.current = true
+          }
+        }
       })
       .catch(() => {})
   }, [setAvatar3dUrl])
@@ -128,22 +155,6 @@ export function ProfileButton() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  const handleAvatarReady = useCallback(async (glbUrl: string) => {
-    try {
-      // Determine URL type for the dedicated avatar3d endpoint
-      const urlType = glbUrl.startsWith('data:') ? 'dataURL' : 'httpURL'
-      await fetch('/api/profile/avatar3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: glbUrl, urlType }),
-      })
-      setShowAvatarCreator(false)
-      fetchProfile()
-    } catch (err) {
-      console.error('[Profile] Avatar save failed:', err)
-    }
-  }, [fetchProfile])
 
   if (!session?.user) return null
 
@@ -403,14 +414,14 @@ export function ProfileButton() {
           {/* Menu items */}
           <div className="p-2">
             <button
-              onClick={() => { setShowAvatarCreator(true); setIsOpen(false) }}
+              onClick={() => { setShowAvatarGallery(true); setIsOpen(false) }}
               className="w-full text-left px-3 py-2 rounded text-sm transition-colors cursor-pointer"
               style={{
                 color: profile.avatar_3d_url ? '#A855F7' : '#60A5FA',
                 background: profile.avatar_3d_url ? 'rgba(168,85,247,0.08)' : 'transparent',
               }}
             >
-              {profile.avatar_3d_url ? '🧑 Edit 3D Avatar' : '✨ Create 3D Avatar'}
+              {profile.avatar_3d_url ? '🧑 Change Avatar' : '✨ Choose Avatar'}
             </button>
             <button
               onClick={() => { window.open('/explore', '_blank'); setIsOpen(false) }}
@@ -433,12 +444,36 @@ export function ProfileButton() {
           </div>
         </div>
       )}
-      {/* RPM Avatar Creator overlay */}
-      {showAvatarCreator && (
-        <AvatarCreator
-          onAvatarReady={handleAvatarReady}
-          onClose={() => setShowAvatarCreator(false)}
+      {/* Avatar Gallery */}
+      {showAvatarGallery && (
+        <AvatarGallery
+          currentAvatarUrl={profile.avatar_3d_url}
+          onSelect={async (avatarUrl) => {
+            setAvatar3dUrl(avatarUrl)
+            setShowAvatarGallery(false)
+            // Save to profile
+            try {
+              await fetch('/api/profile/avatar3d', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: avatarUrl, urlType: 'localPath' }),
+              })
+              fetchProfile()
+            } catch (err) {
+              console.error('[Profile] Avatar save failed:', err)
+            }
+          }}
+          onClose={() => setShowAvatarGallery(false)}
         />
+      )}
+      {/* Daily bonus toast */}
+      {dailyBonusToast && (
+        <div
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-[10001] px-5 py-3 rounded-lg border border-yellow-500/40 shadow-lg animate-bounce"
+          style={{ background: 'rgba(20,10,0,0.9)', boxShadow: '0 0 20px rgba(234, 179, 8, 0.3)' }}
+        >
+          <span className="text-yellow-400 font-bold text-sm">{dailyBonusToast}</span>
+        </div>
       )}
     </div>
   )

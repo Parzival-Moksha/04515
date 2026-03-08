@@ -35,10 +35,10 @@ Open [http://localhost:4515](http://localhost:4515)
 - **Paint** — Paint ground textures tile-by-tile with real-time brush. Grass, stone, sand, lava, and more.
 - **Terrain** — Describe a landscape in natural language, get procedural terrain with height maps and vertex-colored biomes.
 - **Craft** — LLM-powered scene generation. Describe a scene, get procedural geometry.
-- **Build** — Place, move, rotate, scale any object. 100+ built-in cyberpunk assets. Full transform gizmos.
+- **Build** — Place, move, rotate, scale any object. 480+ built-in assets (cyberpunk, medieval, urban, furniture, nature). Full transform gizmos.
 - **Light** — Add point lights, spotlights, hemisphere lights. Full color, intensity, shadow control.
 - **Persist** — Every change autosaves. Create multiple worlds, switch between them.
-- **Sky** — 16 sky environments: 4 local HDRIs + 10 drei presets (dawn, sunset, forest, city, etc.)
+- **Sky** — 24 sky environments: 4 night panoramas + 8 Poly Haven HDRIs (alps, grotto, sunset, stadium...) + 10 drei presets + procedural stars
 
 ## Controls
 
@@ -75,7 +75,7 @@ data/
   scene-library.json       — Saved crafted scenes
 public/
   conjured/                — Runtime-generated GLB files
-  models/                  — Built-in asset library (Quaternius Cyberpunk Kit)
+  models/                  — Built-in asset library (Quaternius + Kenney, all CC0)
   hdri/                    — Sky environment textures
   textures/                — Ground painting textures
 ```
@@ -105,6 +105,16 @@ The repo ships with a showcase world (`forge-default`) containing:
 - Cyberpunk street lights
 - Painted stone/grass circular plaza
 - Venice sunset sky
+
+## Asset Credits
+
+Built-in 3D assets and environments provided by these incredible creators (all CC0 / public domain):
+
+- **[Quaternius](https://quaternius.com)** — Cyberpunk Game Kit, Sci-Fi Essentials, characters
+- **[Kenney](https://kenney.nl)** — Retro Medieval Kit (105 models), Retro Urban Kit (124 models), Furniture Kit (140 models)
+- **[Poly Haven](https://polyhaven.com)** — HDR environment maps (alps, autumn, blue grotto, belfast sunset, and more)
+
+No attribution is legally required (CC0), but these people give away their life's work for free. Consider supporting them.
 
 ## License
 

@@ -201,10 +201,20 @@ export function CatalogModelRenderer({ path, scale, objectId, displayName }: { p
   // ─═̷─═̷─🦴 SkeletonUtils.clone for proper skinned mesh + bone cloning ─═̷─═̷─🦴
   const clonedScene = useMemo(() => {
     const clone = SkeletonUtils.clone(scene) as THREE.Group
-    // Kill raycasting on all child meshes — bounding box proxy handles clicks
     clone.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         child.raycast = () => {}
+        // Enable vertex colors for models that use them (Kenney assets etc.)
+        const mesh = child as THREE.Mesh
+        if (mesh.geometry.attributes.color) {
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+          mats.forEach((mat) => {
+            if (mat && 'vertexColors' in mat && !mat.vertexColors) {
+              mat.vertexColors = true
+              mat.needsUpdate = true
+            }
+          })
+        }
       }
     })
     return clone
@@ -638,6 +648,10 @@ function GhostGLB({ path, scale }: { path: string; scale: number }) {
           ghost.transparent = true
           ghost.opacity = GHOST_OPACITY
           ghost.depthWrite = false
+          // Enable vertex colors for Kenney-style models
+          if (child.geometry.attributes.color && 'vertexColors' in ghost) {
+            ghost.vertexColors = true
+          }
           return ghost
         })
         // Preserve original material shape — single or array

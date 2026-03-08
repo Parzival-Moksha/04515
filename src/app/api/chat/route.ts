@@ -8,8 +8,8 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
 
-const MAX_MESSAGES = 50
-const MAX_CONTENT_LENGTH = 500
+const MAX_MESSAGES = 200
+const MAX_CONTENT_LENGTH = 10000
 
 export async function GET(request: Request) {
   try {

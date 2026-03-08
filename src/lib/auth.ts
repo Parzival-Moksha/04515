@@ -1,18 +1,30 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 // 04515 — Auth Config (NextAuth v5)
-// JWT sessions, Google OAuth. Supabase user sync on sign-in.
+// JWT sessions. Google + Discord + GitHub OAuth. Supabase user sync.
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
+import Discord from 'next-auth/providers/discord'
+import GitHub from 'next-auth/providers/github'
 import { getServerSupabase } from './supabase'
-import { FREE_CREDITS } from '@/lib/conjure/types'
+import { getPrice } from '@/lib/pricing'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    Discord({
+      clientId: process.env.DISCORD_CLIENT_ID!,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+      // Only request identity — skip email scope (not all Discord users verify email)
+      authorization: 'https://discord.com/api/oauth2/authorize?scope=identify',
+    }),
+    GitHub({
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
     }),
   ],
   session: {
@@ -38,27 +50,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       try {
         const sb = getServerSupabase()
-        const userId = profile?.sub || user.id
+        // Google uses profile.sub, Discord/GitHub use profile.id
+        const rawId = profile?.sub || String(profile?.id || user.id)
+        // Namespace non-Google IDs to avoid cross-provider collisions
+        const userId = account?.provider === 'google' ? rawId : `${account?.provider}_${rawId}`
         // Check if user already exists — don't overwrite credits on re-login
         const { data: existing } = await sb.from('profiles').select('id').eq('id', userId).single()
         if (existing) {
-          // Returning user — update Google fields only
+          // Returning user — update provider fields only
           // DON'T overwrite avatar_url (user may have uploaded a custom one)
           await sb.from('profiles').update({
             email: user.email,
             name: user.name,
-            provider: account?.provider || 'google',
+            provider: account?.provider,
             updated_at: new Date().toISOString(),
           }).eq('id', userId)
         } else {
-          // New user — grant free credits
+          // New user — grant free credits (dynamic from admin dashboard)
+          const freeCredits = await getPrice('free_credits')
           await sb.from('profiles').insert({
             id: userId,
             email: user.email,
             name: user.name,
             avatar_url: user.image,
-            provider: account?.provider || 'google',
-            credits: FREE_CREDITS,
+            provider: account?.provider,
+            credits: freeCredits || 3,
             updated_at: new Date().toISOString(),
           })
         }
@@ -71,7 +87,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Attach user id to the session so client components can use it
     async jwt({ token, account, profile }) {
       if (account && profile) {
-        token.id = profile.sub
+        const rawId = profile.sub || String(profile.id)
+        // Must match the userId logic in signIn callback
+        token.id = account.provider === 'google' ? rawId : `${account.provider}_${rawId}`
       }
       return token
     },

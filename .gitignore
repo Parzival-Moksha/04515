@@ -45,6 +45,16 @@ public/conjured/*
 !public/conjured/conj_mmatfnjvhtfw.glb
 !public/conjured/conj_mmatfnjvhtfw_thumb.jpg
 
+# Avatar gallery VRMs (downloaded per-instance, large files)
+public/avatars/gallery/
+
+# User-uploaded avatars (runtime-generated)
+public/avatars/*.glb
+public/avatars/*.jpg
+public/avatars/*.png
+public/avatars/*.webp
+public/avatars/*.gif
+
 # Runtime-generated thumbnails
 public/crafted-thumbs/*
 !public/crafted-thumbs/.gitkeep
@@ -53,6 +63,17 @@ public/thumbs/
 # Bulk source archives (blend/gltf zips — only extracted textures needed)
 *.blend.zip
 *.gltf.zip
+
+# HDRI sky backgrounds (large, 69MB+ total — download per-instance)
+public/hdri/
+
+# Animation libraries (large GLBs — not wired into catalog yet)
+public/models/animations/
+
+# Quaternius asset packs (large GLTF+textures, 200MB+)
+public/models/quaternius-scifi/
+public/models/quaternius-fantasy/
+public/models/quaternius-medieval-village/
 
 # Runtime data (per-instance, diverges between local dev and prod)
 data/conjured-registry.json

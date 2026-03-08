@@ -9,8 +9,8 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
 
-const MAX_TITLE_LENGTH = 100
-const MAX_BODY_LENGTH = 1000
+const MAX_TITLE_LENGTH = 500
+const MAX_BODY_LENGTH = 50000
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || ''
 
 export async function GET(request: Request) {

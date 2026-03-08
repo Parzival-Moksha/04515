@@ -37,7 +37,7 @@ export interface AssetDefinition {
   id: string
   name: string
   path: string
-  category: 'platforms' | 'enemies' | 'pickups' | 'character' | 'nature' | 'guns' | 'props'
+  category: 'platforms' | 'enemies' | 'pickups' | 'character' | 'nature' | 'guns' | 'props' | 'medieval' | 'urban' | 'vehicles' | 'structures' | 'furniture' | 'scifi' | 'fantasy' | 'village' | 'avatar'
   defaultScale: number
 }
 

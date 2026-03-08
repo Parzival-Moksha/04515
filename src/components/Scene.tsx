@@ -55,6 +55,8 @@ enum FPSControls {
   right = 'right',
   up = 'up',
   down = 'down',
+  sprint = 'sprint',
+  slow = 'slow',
 }
 
 const FPS_KEYBOARD_MAP = [
@@ -63,18 +65,41 @@ const FPS_KEYBOARD_MAP = [
   { name: FPSControls.left, keys: ['KeyA', 'ArrowLeft'] },
   { name: FPSControls.right, keys: ['KeyD', 'ArrowRight'] },
   { name: FPSControls.up, keys: ['KeyQ', 'Space'] },
-  { name: FPSControls.down, keys: ['KeyE', 'ShiftLeft'] },
+  { name: FPSControls.down, keys: ['KeyE'] },
+  { name: FPSControls.sprint, keys: ['ShiftLeft', 'ShiftRight'] },
+  { name: FPSControls.slow, keys: ['ControlLeft', 'ControlRight', 'KeyC'] },
 ]
 
 // ─═̷─═̷─🕹️─═̷─═̷─{ FPS MOVEMENT COMPONENT }─═̷─═̷─🕹️─═̷─═̷─
 // Smooth 1-second acceleration ramp via velocity lerp
+// Sprint (Shift) = 4x speed, Slow (Ctrl/C) = 0.25x speed, smooth ramp + VFX
+
+// Module-level ref: FPSMovement writes, PostProcessing + SprintParticles read
+// intensity: 0 = normal, 1 = full sprint, negative = slowing
+const sprintRef = { current: { intensity: 0, multiplier: 1 } }
+
 function FPSMovement({ speed }: { speed: number }) {
   const [, getKeys] = useKeyboardControls<FPSControls>()
   const velocityRef = useRef(new THREE.Vector3())
+  const multiplierRef = useRef(1)
+  const baseFovRef = useRef(0)
+  const elapsedRef = useRef(0)
 
   useFrame((state, delta) => {
-    const { forward, backward, left, right, up, down } = getKeys()
+    const { forward, backward, left, right, up, down, sprint, slow } = getKeys()
 
+    // ── Speed multiplier ramp (~1s to full) ──────────────────────────
+    const targetMultiplier = sprint ? 4 : slow ? 0.25 : 1
+    const rampSpeed = 3 // 1 - e^(-3) ≈ 0.95 after 1s
+    const rampLerp = 1 - Math.exp(-rampSpeed * delta)
+    multiplierRef.current += (targetMultiplier - multiplierRef.current) * rampLerp
+
+    // Publish sprint state for PostProcessing + particles
+    const m = multiplierRef.current
+    sprintRef.current.multiplier = m
+    sprintRef.current.intensity = m > 1.05 ? (m - 1) / 3 : m < 0.95 ? (m - 1) / 0.75 : 0
+
+    // ── Movement direction ───────────────────────────────────────────
     const direction = new THREE.Vector3()
     const camera = state.camera
 
@@ -95,16 +120,117 @@ function FPSMovement({ speed }: { speed: number }) {
 
     direction.normalize()
 
-    const targetVelocity = direction.multiplyScalar(speed)
+    const effectiveSpeed = speed * multiplierRef.current
+    const targetVelocity = direction.multiplyScalar(effectiveSpeed)
 
     // Lerp velocity for smooth ramp (~0.2s to 80% speed)
     const lerpFactor = 1 - Math.exp(-5 * delta)
     velocityRef.current.lerp(targetVelocity, lerpFactor)
 
     camera.position.add(velocityRef.current.clone().multiplyScalar(delta))
+
+    // ── FOV ramp (wider = speed feel) ────────────────────────────────
+    if (camera instanceof THREE.PerspectiveCamera) {
+      if (baseFovRef.current === 0) baseFovRef.current = camera.fov
+      const targetFov = baseFovRef.current + (multiplierRef.current - 1) * 5
+      camera.fov += (targetFov - camera.fov) * rampLerp
+      camera.updateProjectionMatrix()
+    }
+
+    // ── Camera shake (smooth sinusoidal, only during sprint) ─────────
+    const si = Math.max(0, sprintRef.current.intensity)
+    if (si > 0.05) {
+      elapsedRef.current += delta
+      const t = elapsedRef.current
+      const shakeAmt = si * 0.018
+      camera.position.x += Math.sin(t * 23.1) * Math.sin(t * 17.3) * shakeAmt
+      camera.position.y += Math.sin(t * 19.7) * Math.cos(t * 13.8) * shakeAmt
+    }
   })
 
   return null
+}
+
+// ─═̷─═̷─💨─═̷─═̷─{ SPRINT SPEED LINES }─═̷─═̷─💨─═̷─═̷─
+// Instanced thin streaks that fly past the camera during sprint
+const SPRINT_LINE_COUNT = 80
+
+function SprintParticles() {
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const dummy = useRef(new THREE.Object3D())
+  const particles = useRef<{ x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number }[]>([])
+
+  // Init particle pool
+  if (particles.current.length === 0) {
+    particles.current = Array.from({ length: SPRINT_LINE_COUNT }, () => ({
+      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0,
+    }))
+  }
+
+  useFrame((state, delta) => {
+    const intensity = Math.max(0, sprintRef.current.intensity)
+    const mesh = meshRef.current
+    if (!mesh) return
+
+    // Hide all when not sprinting
+    if (intensity < 0.05) {
+      mesh.visible = false
+      return
+    }
+    mesh.visible = true
+
+    const cam = state.camera
+    const camDir = new THREE.Vector3()
+    cam.getWorldDirection(camDir)
+
+    const camRight = new THREE.Vector3()
+    camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize()
+    const camUp = new THREE.Vector3()
+    camUp.crossVectors(camRight, camDir).normalize()
+
+    particles.current.forEach((p, i) => {
+      p.life -= delta
+
+      if (p.life <= 0) {
+        // Spawn in a ring around camera, biased to periphery
+        const angle = Math.random() * Math.PI * 2
+        const radius = 1.5 + Math.random() * 4
+        const ahead = 8 + Math.random() * 12
+        const spread = (Math.random() - 0.5) * 6
+
+        p.x = cam.position.x + camDir.x * ahead + camRight.x * Math.cos(angle) * radius + camUp.x * (Math.sin(angle) * radius + spread)
+        p.y = cam.position.y + camDir.y * ahead + camRight.y * Math.cos(angle) * radius + camUp.y * (Math.sin(angle) * radius + spread)
+        p.z = cam.position.z + camDir.z * ahead + camRight.z * Math.cos(angle) * radius + camUp.z * (Math.sin(angle) * radius + spread)
+
+        // Fly backward relative to camera
+        const speed = 25 + Math.random() * 20
+        p.vx = -camDir.x * speed
+        p.vy = -camDir.y * speed
+        p.vz = -camDir.z * speed
+        p.life = 0.2 + Math.random() * 0.4
+      }
+
+      p.x += p.vx * delta
+      p.y += p.vy * delta
+      p.z += p.vz * delta
+
+      dummy.current.position.set(p.x, p.y, p.z)
+      dummy.current.lookAt(p.x + p.vx, p.y + p.vy, p.z + p.vz)
+      const streakLen = 0.3 + intensity * 1.2
+      dummy.current.scale.set(0.012, 0.012, streakLen)
+      dummy.current.updateMatrix()
+      mesh.setMatrixAt(i, dummy.current.matrix)
+    })
+
+    mesh.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, SPRINT_LINE_COUNT]} frustumCulled={false}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="#ffffff" transparent opacity={0.25} depthWrite={false} />
+    </instancedMesh>
+  )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -439,8 +565,34 @@ function CameraLerp({ controlsRef }: { controlsRef: React.RefObject<any> }) {
 
 function PostProcessing() {
   const { settings } = useContext(SettingsContext)
+  const [sprintActive, setSprintActive] = useState(false)
+  const chromaticRef = useRef<any>(null)
+  const vignetteRef = useRef<any>(null)
 
-  const hasEffects = settings.bloomEnabled || settings.vignetteEnabled || settings.chromaticEnabled
+  useFrame(() => {
+    const si = Math.max(0, sprintRef.current.intensity)
+    const isActive = si > 0.05
+    if (isActive !== sprintActive) setSprintActive(isActive)
+
+    // Imperatively update effect uniforms — no re-renders needed
+    if (chromaticRef.current) {
+      const base = settings.chromaticEnabled ? 0.003 : 0
+      const boost = si * 0.012
+      const val = base + boost
+      // Assign new Vector2 — offset may not be a Vector2 in all postprocessing versions
+      chromaticRef.current.offset = new THREE.Vector2(val, val)
+    }
+    if (vignetteRef.current) {
+      const baseDarkness = settings.vignetteEnabled ? 0.7 : 0
+      const boost = si * 0.4
+      const target = baseDarkness + boost
+      const u = vignetteRef.current.uniforms?.get?.('darkness')
+      if (u) u.value = target
+      else if ('darkness' in vignetteRef.current) (vignetteRef.current as any).darkness = target
+    }
+  })
+
+  const hasEffects = settings.bloomEnabled || settings.vignetteEnabled || settings.chromaticEnabled || sprintActive
   if (!hasEffects) return null
 
   return (
@@ -451,11 +603,13 @@ function PostProcessing() {
         luminanceSmoothing={0.4}
       />
       <Vignette
+        ref={vignetteRef}
         offset={0.3}
         darkness={settings.vignetteEnabled ? 0.7 : 0}
         blendFunction={BlendFunction.NORMAL}
       />
       <ChromaticAberration
+        ref={chromaticRef}
         offset={settings.chromaticEnabled ? [0.003, 0.003] as any : [0, 0] as any}
         radialModulation
         modulationOffset={0.5}
@@ -563,6 +717,8 @@ export default function Scene() {
   // ─═̷─═̷─🌍─═̷─═̷─{ WORLD LOADER — ensures conjured assets + world state loaded }─═̷─═̷─🌍─═̷─═̷─
   useWorldLoader()
 
+  const isViewMode = useOasisStore(s => s.isViewMode)
+
   // ─═̷─═̷─✨─═̷─═̷─{ WIZARD CONSOLE + ASSET EXPLORER STATE }─═̷─═̷─✨─═̷─═̷─
   const [wizardOpen, setWizardOpen] = useState(true)
   // Asset Explorer removed — merged into WizardConsole
@@ -654,6 +810,7 @@ export default function Scene() {
               pointerSpeed={settings.mouseSensitivity}
             />
             <FPSMovement speed={settings.moveSpeed} />
+            <SprintParticles />
           </>
         )}
 
@@ -711,23 +868,27 @@ export default function Scene() {
         <SettingsGear>
           <SettingsContent />
         </SettingsGear>
-        <button
-          onClick={() => setWizardOpen(prev => !prev)}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
-          style={{
-            background: wizardOpen ? 'rgba(249,115,22,0.4)' : 'rgba(0,0,0,0.6)',
-            border: `1px solid ${wizardOpen ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.15)'}`,
-            color: wizardOpen ? '#F97316' : '#aaa',
-            boxShadow: wizardOpen ? '0 0 12px rgba(249,115,22,0.3)' : 'none',
-          }}
-          title="Wizard Console"
-        >
-          ✨
-        </button>
-        <ActionLogButton
-          onClick={() => setActionLogOpen(prev => !prev)}
-          isOpen={actionLogOpen}
-        />
+        {!isViewMode && (
+          <button
+            onClick={() => setWizardOpen(prev => !prev)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+            style={{
+              background: wizardOpen ? 'rgba(249,115,22,0.4)' : 'rgba(0,0,0,0.6)',
+              border: `1px solid ${wizardOpen ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.15)'}`,
+              color: wizardOpen ? '#F97316' : '#aaa',
+              boxShadow: wizardOpen ? '0 0 12px rgba(249,115,22,0.3)' : 'none',
+            }}
+            title="Wizard Console"
+          >
+            ✨
+          </button>
+        )}
+        {!isViewMode && (
+          <ActionLogButton
+            onClick={() => setActionLogOpen(prev => !prev)}
+            isOpen={actionLogOpen}
+          />
+        )}
         <button
           onClick={() => setChatOpen(prev => !prev)}
           className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
@@ -756,17 +917,21 @@ export default function Scene() {
         </button>
       </div>
 
-      {/* ✨ Wizard Console */}
-      <WizardConsole
-        isOpen={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-      />
+      {/* ✨ Wizard Console — hidden in view mode */}
+      {!isViewMode && (
+        <WizardConsole
+          isOpen={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
 
-      {/* 🔍 Object Inspector */}
-      <ObjectInspector
-        isOpen={!!inspectedObjectId}
-        onClose={() => setInspectedObject(null)}
-      />
+      {/* 🔍 Object Inspector — hidden in view mode */}
+      {!isViewMode && (
+        <ObjectInspector
+          isOpen={!!inspectedObjectId}
+          onClose={() => setInspectedObject(null)}
+        />
+      )}
 
       {/* ⏪ Action Log */}
       <ActionLogPanel

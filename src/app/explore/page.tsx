@@ -1,7 +1,7 @@
 'use client'
 
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-// WORLD EXPLORER — Discover public worlds
+// WORLD EXPLORER + LEADERBOARD
 // ─═̷─═̷─ॐ─═̷─═̷─ The gateway to the community ─═̷─═̷─ॐ─═̷─═̷─
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
@@ -10,16 +10,118 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import type { ExploreWorld } from '@/app/api/explore/route'
+import type { LeaderboardEntry, LeaderboardResponse } from '@/app/api/leaderboard/route'
 
+type PageTab = 'worlds' | 'leaderboard'
 type SortMode = 'hot' | 'new' | 'top'
+type LeaderboardType = 'xp' | 'aura'
+type LeaderboardPeriod = 'week' | 'month' | 'all'
 
 const API_BASE = typeof window !== 'undefined'
   ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/explore`
   : '/api/explore'
 
+const LB_API_BASE = typeof window !== 'undefined'
+  ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/leaderboard`
+  : '/api/leaderboard'
+
+function getInitialTab(): PageTab {
+  if (typeof window === 'undefined') return 'worlds'
+  const params = new URLSearchParams(window.location.search)
+  return params.get('tab') === 'leaderboard' ? 'leaderboard' : 'worlds'
+}
+
 export default function ExplorePage() {
   const router = useRouter()
   const { data: session } = useSession()
+  const [pageTab, setPageTab] = useState<PageTab>(getInitialTab)
+
+  return (
+    <main className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <header className="border-b border-gray-800 px-6 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Image src="/favicon.svg" alt="Oasis" width={32} height={32} className="opacity-90" />
+            <h1
+              className="text-xl font-bold tracking-wider"
+              style={{ fontFamily: "'Courier New', monospace", textShadow: '0 0 15px rgba(168, 85, 247, 0.4)' }}
+            >
+              {pageTab === 'worlds' ? 'EXPLORE WORLDS' : 'LEADERBOARD'}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {session?.user ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                {session.user.image && (
+                  <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                )}
+                <span className="hidden sm:inline">{session.user.name}</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => router.push('/login')}
+                className="px-3 py-1.5 text-sm text-purple-400 border border-purple-500/30 rounded hover:bg-purple-600/20 transition-colors"
+              >
+                Sign In
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
+            >
+              Enter the Oasis
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Page tabs: Worlds | Leaderboard */}
+      <div className="max-w-6xl mx-auto px-6 pt-4">
+        <div className="flex gap-1 bg-gray-900/60 rounded-lg p-1 w-fit">
+          <button
+            onClick={() => setPageTab('worlds')}
+            className={`px-5 py-2 text-sm rounded-md font-medium transition-all ${
+              pageTab === 'worlds'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Worlds
+          </button>
+          <button
+            onClick={() => setPageTab('leaderboard')}
+            className={`px-5 py-2 text-sm rounded-md font-medium transition-all ${
+              pageTab === 'leaderboard'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Leaderboard
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      {pageTab === 'worlds' ? (
+        <WorldsTab session={session} router={router} />
+      ) : (
+        <LeaderboardTab session={session} />
+      )}
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800 px-6 py-4 text-center">
+        <p className="text-gray-700 text-xs">04515.xyz — The Oasis</p>
+      </footer>
+    </main>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORLDS TAB — The original explore grid
+// ═══════════════════════════════════════════════════════════════════════════
+
+function WorldsTab({ session, router }: { session: ReturnType<typeof useSession>['data']; router: ReturnType<typeof useRouter> }) {
   const [worlds, setWorlds] = useState<ExploreWorld[]>([])
   const [sort, setSort] = useState<SortMode>('hot')
   const [search, setSearch] = useState('')
@@ -59,7 +161,7 @@ export default function ExplorePage() {
       router.push('/login')
       return
     }
-    if (votingId) return // prevent double-click
+    if (votingId) return
     setVotingId(worldId)
     try {
       const res = await fetch(`/api/worlds/${worldId}/vote`, { method: 'POST' })
@@ -80,54 +182,14 @@ export default function ExplorePage() {
 
   const handleWorldClick = (world: ExploreWorld) => {
     if (session?.user?.id === world.user_id) {
-      // Own world — go to forge and switch to it
       router.push(`/?world=${world.id}`)
     } else {
-      // Other user's world — go to forge in view mode
       router.push(`/?view=${world.id}`)
     }
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Image src="/favicon.svg" alt="Oasis" width={32} height={32} className="opacity-90" />
-            <h1
-              className="text-xl font-bold tracking-wider"
-              style={{ fontFamily: "'Courier New', monospace", textShadow: '0 0 15px rgba(168, 85, 247, 0.4)' }}
-            >
-              EXPLORE WORLDS
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {session?.user ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                {session.user.image && (
-                  <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                )}
-                <span className="hidden sm:inline">{session.user.name}</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => router.push('/login')}
-                className="px-3 py-1.5 text-sm text-purple-400 border border-purple-500/30 rounded hover:bg-purple-600/20 transition-colors"
-              >
-                Sign In
-              </button>
-            )}
-            <button
-              onClick={() => router.push('/')}
-              className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
-            >
-              Enter the Oasis
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <>
       {/* Controls */}
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4 flex-wrap">
         {/* Sort tabs */}
@@ -142,7 +204,7 @@ export default function ExplorePage() {
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
               }`}
             >
-              {s === 'hot' ? '🔥 Hot' : s === 'new' ? '✨ New' : '🏆 Top'}
+              {s === 'hot' ? 'Hot' : s === 'new' ? 'New' : 'Top'}
             </button>
           ))}
         </div>
@@ -189,12 +251,190 @@ export default function ExplorePage() {
           </div>
         )}
       </div>
+    </>
+  )
+}
 
-      {/* Footer */}
-      <footer className="border-t border-gray-800 px-6 py-4 text-center">
-        <p className="text-gray-700 text-xs">04515.xyz — The Oasis</p>
-      </footer>
-    </main>
+// ═══════════════════════════════════════════════════════════════════════════
+// LEADERBOARD TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+function LeaderboardTab({ session }: { session: ReturnType<typeof useSession>['data'] }) {
+  const [lbType, setLbType] = useState<LeaderboardType>('xp')
+  const [period, setPeriod] = useState<LeaderboardPeriod>('all')
+  const [data, setData] = useState<LeaderboardResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchLeaderboard = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ type: lbType, period, limit: '50' })
+      const res = await fetch(`${LB_API_BASE}?${params}`)
+      if (res.ok) setData(await res.json())
+    } catch (err) {
+      console.error('[Leaderboard] fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [lbType, period])
+
+  useEffect(() => { fetchLeaderboard() }, [fetchLeaderboard])
+
+  return (
+    <div className="max-w-4xl mx-auto px-6 py-4 pb-8">
+      {/* Sub-tabs: XP | Aura */}
+      <div className="flex items-center gap-4 flex-wrap mb-4">
+        <div className="flex gap-1 bg-gray-900 rounded p-1">
+          <button
+            onClick={() => setLbType('xp')}
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              lbType === 'xp' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            XP Grind
+          </button>
+          <button
+            onClick={() => setLbType('aura')}
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              lbType === 'aura' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Aura
+          </button>
+        </div>
+
+        {/* Period filter — only for XP */}
+        {lbType === 'xp' && (
+          <div className="flex gap-1 bg-gray-900 rounded p-1">
+            {(['week', 'month', 'all'] as LeaderboardPeriod[]).map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                  period === p ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {p === 'week' ? '7 days' : p === 'month' ? '30 days' : 'All-time'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* User rank banner */}
+      {session?.user && data?.user_rank && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-purple-900/20 border border-purple-500/20 flex items-center gap-3">
+          <span className="text-purple-400 font-mono text-sm">Your rank:</span>
+          <span className="text-white font-bold text-lg">#{data.user_rank}</span>
+          <span className="text-gray-400 text-sm">
+            ({(data.user_value || 0).toLocaleString()} {lbType === 'xp' ? 'XP' : 'aura'})
+          </span>
+        </div>
+      )}
+
+      {/* Leaderboard table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <p className="text-gray-500 animate-pulse">Loading leaderboard...</p>
+        </div>
+      ) : !data?.entries.length ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <p className="text-gray-500 text-lg">No rankings yet</p>
+          <p className="text-gray-600 text-sm">
+            {lbType === 'xp' && period !== 'all'
+              ? `No one earned XP in the last ${period === 'week' ? '7' : '30'} days`
+              : 'Start building to claim your spot'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {/* Header row */}
+          <div className="grid grid-cols-[3rem_1fr_5rem_6rem] sm:grid-cols-[3rem_1fr_6rem_4rem_6rem] items-center px-3 py-2 text-xs text-gray-500 font-mono uppercase tracking-wider">
+            <span>#</span>
+            <span>Builder</span>
+            <span className="hidden sm:block text-center">Level</span>
+            <span className="text-right">{lbType === 'xp' ? 'XP' : 'Aura'}</span>
+          </div>
+
+          {data.entries.map(entry => (
+            <LeaderboardRow
+              key={entry.user_id}
+              entry={entry}
+              isCurrentUser={session?.user?.id === entry.user_id}
+              valueLabel={lbType === 'xp' ? 'XP' : ''}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LEADERBOARD ROW
+// ═══════════════════════════════════════════════════════════════════════════
+
+const RANK_STYLES: Record<number, { bg: string; text: string; medal: string }> = {
+  1: { bg: 'bg-yellow-500/10 border-yellow-500/30', text: 'text-yellow-400', medal: '' },
+  2: { bg: 'bg-gray-300/10 border-gray-400/30', text: 'text-gray-300', medal: '' },
+  3: { bg: 'bg-orange-500/10 border-orange-500/30', text: 'text-orange-400', medal: '' },
+}
+
+function LeaderboardRow({ entry, isCurrentUser, valueLabel }: {
+  entry: LeaderboardEntry
+  isCurrentUser: boolean
+  valueLabel: string
+}) {
+  const style = RANK_STYLES[entry.rank]
+  const isTop3 = !!style
+
+  return (
+    <div
+      className={`grid grid-cols-[3rem_1fr_5rem_6rem] sm:grid-cols-[3rem_1fr_6rem_4rem_6rem] items-center px-3 py-2.5 rounded-lg border transition-colors ${
+        isCurrentUser
+          ? 'bg-purple-900/20 border-purple-500/30'
+          : isTop3
+            ? `${style.bg} border`
+            : 'bg-gray-900/40 border-transparent hover:bg-gray-900/60'
+      }`}
+    >
+      {/* Rank */}
+      <span className={`font-mono font-bold text-sm ${
+        isTop3 ? style.text : 'text-gray-500'
+      }`}>
+        {isTop3 ? style.medal : `#${entry.rank}`}
+      </span>
+
+      {/* User info */}
+      <div className="flex items-center gap-2.5 min-w-0">
+        {entry.avatar_url ? (
+          <img src={entry.avatar_url} alt="" className="w-7 h-7 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs text-gray-500">{entry.display_name[0]?.toUpperCase()}</span>
+          </div>
+        )}
+        <div className="min-w-0">
+          <span className={`text-sm truncate block ${isCurrentUser ? 'text-purple-300 font-medium' : 'text-white'}`}>
+            {entry.display_name}
+            {isCurrentUser && <span className="text-purple-500 text-xs ml-1">(you)</span>}
+          </span>
+          <span className="text-xs text-gray-600 sm:hidden">{entry.level_badge} {entry.level_title}</span>
+        </div>
+      </div>
+
+      {/* Level (desktop) */}
+      <div className="hidden sm:flex items-center justify-center gap-1">
+        <span className="text-xs font-mono text-gray-400">{entry.level_badge}</span>
+        <span className="text-xs text-gray-500">Lv.{entry.level}</span>
+      </div>
+
+      {/* Value */}
+      <span className={`text-right font-mono text-sm ${isTop3 ? style.text : 'text-gray-300'}`}>
+        {entry.value.toLocaleString()}
+        {valueLabel && <span className="text-gray-600 text-xs ml-0.5">{valueLabel}</span>}
+      </span>
+    </div>
   )
 }
 
@@ -238,7 +478,7 @@ function WorldCard({
         )}
         {/* Visit count overlay */}
         <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded text-xs text-gray-300">
-          👁 {world.visit_count}
+          {world.visit_count} visits
         </div>
         {/* Own world badge */}
         {isOwn && (
@@ -269,7 +509,7 @@ function WorldCard({
             </div>
           </div>
 
-          {/* Upvote button — don't show on own worlds */}
+          {/* Upvote button */}
           {!isOwn && (
             <button
               onClick={e => { e.stopPropagation(); onVote() }}

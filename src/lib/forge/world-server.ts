@@ -222,10 +222,10 @@ export async function recordVisit(worldId: string): Promise<void> {
 // LOAD PUBLIC — load a world without user_id check (for explore)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export async function loadPublicWorld(id: string): Promise<{ state: WorldState; meta: WorldMeta } | null> {
+export async function loadPublicWorld(id: string): Promise<{ state: WorldState; meta: WorldMeta & { creator_name?: string; creator_avatar?: string } } | null> {
   const { data, error } = await sb()
     .from('worlds')
-    .select('id, name, icon, visibility, data, user_id, created_at, updated_at')
+    .select('id, name, icon, visibility, data, user_id, creator_name, creator_avatar, created_at, updated_at')
     .eq('id', id)
     .in('visibility', ['public', 'unlisted'])
     .single()
@@ -234,7 +234,11 @@ export async function loadPublicWorld(id: string): Promise<{ state: WorldState; 
 
   return {
     state: data.data as WorldState,
-    meta: toWorldMeta(data),
+    meta: {
+      ...toWorldMeta(data),
+      creator_name: (data.creator_name as string) || undefined,
+      creator_avatar: (data.creator_avatar as string) || undefined,
+    },
   }
 }
 

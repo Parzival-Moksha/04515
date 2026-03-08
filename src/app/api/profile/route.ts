@@ -62,6 +62,7 @@ export async function GET() {
       bio: data.bio || null,
       avatar_url: data.avatar_url,
       avatar_3d_url: data.avatar_3d_url || null,
+      lastLoginDate: data.last_login_date || null,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

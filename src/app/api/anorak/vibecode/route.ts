@@ -83,8 +83,10 @@ RULES:
 - You are NOT a coding agent. You do NOT fix bugs. You document them beautifully.`
 
 export async function POST(request: NextRequest) {
+  console.log('[Anorak] Vibecode POST hit')
   try {
     const session = await auth()
+    console.log('[Anorak] Auth result:', session?.user?.id ? 'authenticated' : 'no session')
     if (!session?.user?.id) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
@@ -128,13 +130,14 @@ export async function POST(request: NextRequest) {
       })),
     ]
 
+    console.log('[Anorak] Calling OpenRouter with model:', model, 'messages:', llmMessages.length)
     const llmResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://app.04515.xyz',
-        'X-Title': '04515 Oasis — Anorak Vibecode',
+        'X-Title': '04515 Oasis - Anorak Vibecode',
       },
       body: JSON.stringify({
         model,
@@ -144,6 +147,8 @@ export async function POST(request: NextRequest) {
         max_tokens: 1500,
       }),
     })
+
+    console.log('[Anorak] OpenRouter response status:', llmResponse.status)
 
     if (!llmResponse.ok) {
       const errorText = await llmResponse.text().catch(() => 'Unknown error')
@@ -160,6 +165,7 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         const reader = llmResponse.body?.getReader()
         if (!reader) {
+          console.error('[Anorak] No reader on response body')
           controller.close()
           return
         }
@@ -211,8 +217,9 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('[Anorak] Vibecode error:', err)
-    return new Response(JSON.stringify({ error: 'Internal error' }), {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[Anorak] Vibecode error:', msg, err)
+    return new Response(JSON.stringify({ error: `Anorak stumbled: ${msg}` }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

@@ -50,15 +50,18 @@ export async function PUT(request: Request) {
   }
 }
 
-// POST — add a scene (deduplicated by id)
+// POST — add or update a scene (upsert by id)
 export async function POST(request: Request) {
   try {
     const scene = await request.json() as CraftedScene
     const library = loadLibrary()
-    if (!library.some(s => s.id === scene.id)) {
+    const existing = library.findIndex(s => s.id === scene.id)
+    if (existing >= 0) {
+      library[existing] = scene
+    } else {
       library.push(scene)
-      saveLibrary(library)
     }
+    saveLibrary(library)
     return NextResponse.json({ ok: true }, { status: 201 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

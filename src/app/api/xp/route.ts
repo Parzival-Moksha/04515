@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
-import { XP_AWARDS, type XpAction, levelFromXp } from '@/lib/xp'
+import { XP_AWARDS, type XpAction, levelFromXp, getXpForAction } from '@/lib/xp'
 
 // Per-action cooldowns (seconds) — prevents XP farming
 const ACTION_COOLDOWNS: Partial<Record<XpAction, number>> = {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    const xpAmount = XP_AWARDS[action as XpAction]
+    const xpAmount = await getXpForAction(action)
     const sb = getServerSupabase()
     const userId = session.user.id
 

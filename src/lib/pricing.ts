@@ -17,6 +17,7 @@ const DEFAULT_PRICING: Record<string, number> = {
   post_animate: 0.25,
   craft: 0.05,   // LLM craft — fallback only; real price set in /admin dashboard
   terrain: 0.05, // LLM terrain — fallback only; real price set in /admin dashboard
+  free_credits: 3, // Credits granted to new signups
 }
 
 // Cache pricing for 60s to avoid hammering DB on every request

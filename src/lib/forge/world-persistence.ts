@@ -148,6 +148,26 @@ export async function loadWorld(worldId?: string): Promise<WorldState | null> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// LOAD PUBLIC — view someone else's public world (read-only, no auth required)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface PublicWorldResult {
+  state: WorldState
+  meta: WorldMeta & { creator_name?: string; creator_avatar?: string }
+}
+
+export async function loadPublicWorld(worldId: string): Promise<PublicWorldResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/${worldId}/public`)
+    if (!res.ok) return null
+    return await res.json() as PublicWorldResult
+  } catch (err) {
+    console.error('[WorldPersistence] Failed to load public world:', err)
+    return null
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // EXPORT / IMPORT — world sharing (Minecraft save style)
 // ═══════════════════════════════════════════════════════════════════════════════
 
