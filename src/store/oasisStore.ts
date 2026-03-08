@@ -150,6 +150,7 @@ interface OasisState {
   worldSkyBackground: string           // per-world sky preset ID (was global in SettingsContext)
   activeWorldId: string
   worldRegistry: WorldMeta[]
+  _worldReady: boolean               // ░▒▓ GUARD: true after first successful load from Supabase ▓▒░
 
   // ─═̷─═̷─🧑 AVATAR — RPM 3D avatar ─═̷─═̷─🧑
   avatar3dUrl: string | null
@@ -318,6 +319,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
   worldSkyBackground: 'night007',
   activeWorldId: isBrowser ? getActiveWorldId() : 'forge-default',
   worldRegistry: [],
+  _worldReady: false,  // ░▒▓ GUARD: prevents saving empty state before world loads from Supabase ▓▒░
 
   // ─═̷─═̷─🧑 AVATAR ─═̷─═̷─🧑
   avatar3dUrl: null,
@@ -719,6 +721,12 @@ export const useOasisStore = create<OasisState>((set, get) => {
   loadWorldState: () => {
     if (get().isViewMode) return // don't overwrite viewed world with user's own data
 
+    // ░▒▓ CRITICAL: Cancel any pending saves BEFORE loading ▓▒░
+    // Without this, a debounced save of stale/empty state can fire AFTER
+    // the load starts, overwriting the world we're about to read.
+    cancelPendingSave()
+    set({ _worldReady: false }) // Block saves until load completes
+
     // Helper: seed default lights with proper IDs (for fresh/old worlds)
     const seedDefaultLights = (): WorldLight[] =>
       DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
@@ -726,13 +734,15 @@ export const useOasisStore = create<OasisState>((set, get) => {
     loadWorld().then(world => {
       if (get().isViewMode) return // check again after async — view mode may have been entered during fetch
       if (!world) {
-        set({ terrainParams: null, groundPresetId: 'none', groundTiles: {}, craftedScenes: [], worldConjuredAssetIds: [], placedCatalogAssets: [], transforms: {}, behaviors: {}, worldLights: seedDefaultLights(), worldSkyBackground: 'night007' })
+        set({ _worldReady: true, terrainParams: null, groundPresetId: 'none', groundTiles: {}, craftedScenes: [], worldConjuredAssetIds: [], placedCatalogAssets: [], transforms: {}, behaviors: {}, worldLights: seedDefaultLights(), worldSkyBackground: 'night007' })
+        console.log('[World] No data — initialized empty world')
         return
       }
       // If lights field is undefined (old world never had lights) → seed with defaults
       // If lights is an array (even empty = user chose darkness) → respect it
       const lights = world.lights !== undefined ? world.lights : seedDefaultLights()
       set({
+        _worldReady: true,
         terrainParams: world.terrain || null,
         groundPresetId: world.groundPresetId || 'none',
         groundTiles: world.groundTiles || {},
@@ -749,6 +759,13 @@ export const useOasisStore = create<OasisState>((set, get) => {
   },
   saveWorldState: () => {
     if (get().isViewMode) return // don't save someone else's world
+    // ░▒▓ CRITICAL GUARD: never save until world has loaded from Supabase ▓▒░
+    // Without this, a save during the mount→load gap writes empty state to the DB,
+    // nuking the entire world. This was the Alexandria bug.
+    if (!get()._worldReady) {
+      console.warn('[World] ⚠️ Save blocked — world not loaded yet (preventing empty-state overwrite)')
+      return
+    }
     const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground } = get()
     debouncedSaveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground })
   },
@@ -763,9 +780,14 @@ export const useOasisStore = create<OasisState>((set, get) => {
     // Without this, a stale save timer can fire AFTER the new world loads,
     // overwriting the new world's lights/sky with the old world's stale state.
     cancelPendingSave()
-    // Save current world first (immediate, not debounced)
-    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
-    saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+    // Save current world first (immediate, not debounced) — but ONLY if world was loaded
+    if (get()._worldReady) {
+      const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
+      saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+    }
+
+    // ░▒▓ Block saves during transition — prevents empty state nuke ▓▒░
+    set({ _worldReady: false })
 
     // Switch to new world
     setActiveWorldId(worldId)
@@ -774,6 +796,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
       const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
       const lights = world?.lights !== undefined ? (world?.lights || []) : defaultLights
       set({
+        _worldReady: true,
         activeWorldId: worldId,
         terrainParams: world?.terrain || null,
         groundPresetId: world?.groundPresetId || 'none',
@@ -801,9 +824,12 @@ export const useOasisStore = create<OasisState>((set, get) => {
   },
 
   createNewWorld: (name, icon = '🌍') => {
-    // Save current world first
-    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
-    saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+    // Save current world first — only if world was loaded (prevent empty-state nuke)
+    cancelPendingSave()
+    if (get()._worldReady) {
+      const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
+      saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+    }
 
     // Create and switch to new world (async) — seed with default lights so it's not pitch black
     createWorld(name, icon).then(meta => {
@@ -811,6 +837,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
       setActiveWorldId(meta.id)
       return getWorldRegistry().then(registry => {
         set({
+          _worldReady: true,  // New world is "loaded" — it's empty by definition
           activeWorldId: meta.id,
           worldRegistry: registry,
           terrainParams: null,
@@ -896,7 +923,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
   // ─═̷─═̷─👁️ VIEW MODE — peek into someone else's world (read-only) ─═̷─═̷─👁️
   enterViewMode: (worldId) => {
     // Save current world before entering view mode (if not already viewing)
-    if (!get().isViewMode) {
+    if (!get().isViewMode && get()._worldReady) {
       cancelPendingSave()
       const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
       saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
