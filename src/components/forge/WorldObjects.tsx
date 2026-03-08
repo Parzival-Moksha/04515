@@ -11,7 +11,7 @@
 'use client'
 
 import React, { Suspense, useRef, useState, useEffect, useCallback, useContext, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useLoader } from '@react-three/fiber'
 import { TransformControls, useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
@@ -25,6 +25,8 @@ import { useMovement } from '../../hooks/useMovement'
 import { DragContext } from '../scene-lib'
 import type { MovementPreset, AnimationConfig } from '../../lib/conjure/types'
 import { extractModelStats } from './ModelPreview'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm'
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -395,6 +397,191 @@ export function CatalogModelRenderer({ path, scale, objectId, displayName }: { p
             {triCount > 0 && (
               <div className="text-[10px] text-gray-400">
                 {triCount >= 1000 ? `${(triCount / 1000).toFixed(1)}k` : triCount} tris
+              </div>
+            )}
+          </div>
+        </Html>
+      )}
+    </group>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VRM CATALOG RENDERER — Alive NPCs with expressions, spring bones, blinking
+// Uses @pixiv/three-vrm instead of useGLTF so VRM metadata (expressions,
+// spring bones, lookAt) survives loading. Without this, placed avatars are
+// frozen mannequins. With it, they LIVE — blink, sway, smile.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { path: string; scale: number; objectId?: string; displayName?: string }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const vrmRef = useRef<VRM | null>(null)
+  const [vrm, setVrm] = useState<VRM | null>(null)
+  const [hovered, setHovered] = useState(false)
+  const [showLabel, setShowLabel] = useState(false)
+  const catalogProxyRef = useRef<THREE.Mesh>(null)
+  const paintMode = useOasisStore(s => s.paintMode)
+
+  // Per-NPC blink offset — hash objectId so they don't all blink in creepy unison
+  const blinkOffset = useMemo(() => {
+    if (!objectId) return 0
+    let hash = 0
+    for (let i = 0; i < objectId.length; i++) hash = ((hash << 5) - hash + objectId.charCodeAt(i)) | 0
+    return Math.abs(hash % 400) / 100 // 0-4s offset
+  }, [objectId])
+
+  // Load VRM via GLTFLoader + VRMLoaderPlugin
+  const gltf = useLoader(GLTFLoader, path, (loader) => {
+    loader.register((parser) => new VRMLoaderPlugin(parser))
+  })
+
+  // Extract VRM + fix materials
+  useEffect(() => {
+    const loadedVrm = gltf.userData.vrm as VRM | undefined
+    if (!loadedVrm) {
+      console.warn('[VRM:NPC] No VRM data in', path)
+      return
+    }
+    VRMUtils.rotateVRM0(loadedVrm)
+
+    // MToon IBL fix + shadows
+    loadedVrm.scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        mesh.raycast = () => {} // kill per-tri raycast
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        for (const mat of mats) {
+          if ('giEqualizationFactor' in mat) {
+            ;(mat as Record<string, unknown>).giEqualizationFactor = 0.9
+          }
+          if ('envMapIntensity' in mat) {
+            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.0
+          }
+        }
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+      }
+    })
+
+    vrmRef.current = loadedVrm
+    setVrm(loadedVrm)
+    console.log(`[VRM:NPC] ${displayName || path.split('/').pop()} — expressions: ${Object.keys(loadedVrm.expressionManager?.expressionMap || {}).length}, spring: ${loadedVrm.springBoneManager ? 'yes' : 'no'}`)
+  }, [gltf, path, displayName])
+
+  // Idle animation — spring bones + blink + smile + lookAt
+  useFrame((state, delta) => {
+    const v = vrmRef.current
+    if (!v) return
+
+    v.update(delta)
+
+    const t = state.clock.elapsedTime + blinkOffset
+    const expr = v.expressionManager
+
+    if (expr) {
+      // Blink cycle — offset per NPC so they feel independent
+      const blinkPhase = t % 4
+      expr.setValue('blink', (blinkPhase > 3.7 && blinkPhase < 3.9) ? 1 : 0)
+
+      // Subtle expression — gentle breathing smile
+      const smileAmount = Math.sin(t * 0.3) * 0.15 + 0.1
+      expr.setValue('happy', Math.max(0, smileAmount))
+    }
+
+    // LookAt — eyes wander (offset per NPC too)
+    if (v.lookAt && v.lookAt.target) {
+      (v.lookAt.target as THREE.Object3D).position.set(
+        Math.sin(t * 0.5) * 2,
+        1.5 + Math.sin(t * 0.3) * 0.3,
+        -3 + Math.cos(t * 0.4) * 1
+      )
+    }
+  })
+
+  // Bounding box for proxy raycast
+  const bounds = useMemo(() => {
+    if (!vrm) return { size: new THREE.Vector3(1, 2, 1), center: new THREE.Vector3(0, 1, 0) }
+    const box = new THREE.Box3().setFromObject(vrm.scene)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    if (size.x < 0.5) size.x = 0.5
+    if (size.y < 0.5) size.y = 0.5
+    if (size.z < 0.5) size.z = 0.5
+    return { size, center }
+  }, [vrm])
+
+  // Paint mode — disable proxy raycast so clicks pass through to ground
+  useEffect(() => {
+    if (!catalogProxyRef.current) return
+    catalogProxyRef.current.raycast = paintMode ? () => {} : THREE.Mesh.prototype.raycast
+  }, [paintMode])
+
+  // Push mesh stats to Zustand for ObjectInspector
+  const setObjectMeshStats = useOasisStore(s => s.setObjectMeshStats)
+  useEffect(() => {
+    if (!objectId || !vrm) return
+    let tris = 0, verts = 0, meshCount = 0
+    vrm.scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        meshCount++
+        const geo = mesh.geometry
+        if (geo.index) tris += geo.index.count / 3
+        else if (geo.attributes.position) tris += geo.attributes.position.count / 3
+        if (geo.attributes.position) verts += geo.attributes.position.count
+      }
+    })
+    const box = new THREE.Box3().setFromObject(vrm.scene)
+    const dims = box.getSize(new THREE.Vector3())
+    setObjectMeshStats(objectId, { triangles: Math.floor(tris), vertices: verts, meshCount, materialCount: 0, boneCount: 0, dimensions: { w: dims.x, h: dims.y, d: dims.z }, clips: [], fileSize: 0 })
+  }, [objectId, vrm, setObjectMeshStats])
+
+  const objectStats = useOasisStore(s => objectId ? s.objectMeshStats[objectId] : undefined)
+  const triCount = objectStats?.triangles || 0
+  const labelName = displayName || 'VRM Avatar'
+
+  if (!vrm) return null
+
+  return (
+    <group ref={groupRef}>
+      {/* Transparent bounding box — cheap raycast target */}
+      <mesh
+        ref={catalogProxyRef}
+        position={[bounds.center.x * scale, bounds.center.y * scale, bounds.center.z * scale]}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (objectId) {
+            useOasisStore.getState().selectObject(objectId)
+            useOasisStore.getState().setInspectedObject(objectId)
+          }
+        }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); setShowLabel(true) }}
+        onPointerOut={(e) => { e.stopPropagation(); setHovered(false); setShowLabel(false) }}
+      >
+        <boxGeometry args={[bounds.size.x * scale, bounds.size.y * scale, bounds.size.z * scale]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <primitive object={vrm.scene} scale={scale} />
+
+      {/* Hover glow ring */}
+      {hovered && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+          <ringGeometry args={[0.8 * scale, 1 * scale, 32]} />
+          <meshBasicMaterial color="#A855F7" transparent opacity={0.3} depthWrite={false} />
+        </mesh>
+      )}
+
+      {/* Info label */}
+      {showLabel && (
+        <Html position={[0, bounds.size.y * scale + 0.5, 0]} center>
+          <div
+            className="px-2 py-1 rounded text-xs whitespace-nowrap select-none pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(168,85,247,0.3)', color: '#A855F7' }}
+          >
+            {labelName}
+            {triCount > 0 && (
+              <div className="text-[10px] text-gray-400">
+                {triCount >= 1000 ? `${(triCount / 1000).toFixed(1)}k` : triCount} tris • VRM
               </div>
             )}
           </div>
@@ -1248,7 +1435,10 @@ export function WorldObjectsRenderer() {
           >
             <CatalogModelErrorBoundary path={ca.glbPath} name={ca.name}>
               <Suspense fallback={<PlaceholderBox />}>
-                <CatalogModelRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
+                {ca.glbPath.endsWith('.vrm')
+                  ? <VRMCatalogRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
+                  : <CatalogModelRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
+                }
               </Suspense>
             </CatalogModelErrorBoundary>
           </SelectableWrapper>
