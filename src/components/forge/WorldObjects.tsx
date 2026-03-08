@@ -27,6 +27,7 @@ import type { MovementPreset, AnimationConfig } from '../../lib/conjure/types'
 import { extractModelStats } from './ModelPreview'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm'
+import { loadAnimationClip, retargetClipForVRM, LIB_PREFIX } from '../../lib/forge/animation-library'
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -485,12 +486,96 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     console.log(`[VRM:NPC] ${displayName || path.split('/').pop()} — expressions: ${Object.keys(loadedVrm.expressionManager?.expressionMap || {}).length}, spring: ${loadedVrm.springBoneManager ? 'yes' : 'no'}`)
   }, [gltf, path, displayName])
 
-  // Idle animation — spring bones + blink + smile + lookAt
+  // ░▒▓ WALK ANIMATION — Load from library, retarget for VRM skeleton ▓▒░
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null)
+  const walkActionRef = useRef<THREE.AnimationAction | null>(null)
+  const isWalkingRef = useRef(false)
+  const isMoving = useOasisStore(s => objectId ? !!s.behaviors[objectId]?.moveTarget : false)
+  const animConfig = useOasisStore(s => objectId ? s.behaviors[objectId]?.animation : undefined)
+
+  // Create mixer on VRM scene
+  useEffect(() => {
+    if (!vrm) return
+    const mixer = new THREE.AnimationMixer(vrm.scene)
+    mixerRef.current = mixer
+    return () => { mixer.stopAllAction(); mixerRef.current = null }
+  }, [vrm])
+
+  // Load walk clip + retarget for VRM bones
+  const [walkClip, setWalkClip] = useState<THREE.AnimationClip | null>(null)
+  useEffect(() => {
+    if (!vrm) return
+    loadAnimationClip('walk').then(clip => {
+      if (clip) {
+        const retargeted = retargetClipForVRM(clip, 'vrm-npc')
+        setWalkClip(retargeted)
+      }
+    })
+  }, [vrm])
+
+  // Load explicit behavior animation (from ObjectInspector — dance, combat, etc.)
+  const [behaviorClip, setBehaviorClip] = useState<THREE.AnimationClip | null>(null)
+  useEffect(() => {
+    const clipName = animConfig?.clipName
+    if (!clipName || !vrm) { setBehaviorClip(null); return }
+    // Library animation (lib:walk, lib:breakdance, etc.)
+    if (clipName.startsWith(LIB_PREFIX)) {
+      const animId = clipName.replace(LIB_PREFIX, '')
+      loadAnimationClip(animId).then(clip => {
+        if (clip) setBehaviorClip(retargetClipForVRM(clip, 'vrm-npc'))
+      })
+    }
+  }, [animConfig?.clipName, vrm])
+
+  // ░▒▓ Animation state machine — behavior > walk-during-move > idle ▓▒░
+  useEffect(() => {
+    const mixer = mixerRef.current
+    if (!mixer) return
+
+    // Priority 1: Explicit behavior animation (dance, combat, etc.)
+    if (behaviorClip) {
+      if (walkActionRef.current) { walkActionRef.current.fadeOut(0.3) }
+      const action = mixer.clipAction(behaviorClip)
+      const loop = animConfig?.loop || 'repeat'
+      action.setLoop(loop === 'once' ? THREE.LoopOnce : loop === 'pingpong' ? THREE.LoopPingPong : THREE.LoopRepeat, Infinity)
+      action.clampWhenFinished = loop === 'once'
+      action.timeScale = animConfig?.speed || 1
+      action.reset().fadeIn(0.3).play()
+      walkActionRef.current = action
+      isWalkingRef.current = true
+      return
+    }
+
+    // Priority 2: Walk during RTS movement
+    if (isMoving && walkClip) {
+      if (!isWalkingRef.current) {
+        if (walkActionRef.current) walkActionRef.current.fadeOut(0.2)
+        const action = mixer.clipAction(walkClip)
+        action.setLoop(THREE.LoopRepeat, Infinity)
+        action.reset().fadeIn(0.3).play()
+        walkActionRef.current = action
+        isWalkingRef.current = true
+      }
+      return
+    }
+
+    // Priority 3: Stop walking — fade out
+    if (!isMoving && isWalkingRef.current && !behaviorClip) {
+      if (walkActionRef.current) {
+        walkActionRef.current.fadeOut(0.3)
+        walkActionRef.current = null
+      }
+      isWalkingRef.current = false
+    }
+  }, [isMoving, walkClip, behaviorClip, animConfig?.loop, animConfig?.speed])
+
+  // Idle + walk animation tick — expressions + spring bones + mixer
   useFrame((state, delta) => {
     const v = vrmRef.current
     if (!v) return
 
     v.update(delta)
+    mixerRef.current?.update(delta)
 
     const t = state.clock.elapsedTime + blinkOffset
     const expr = v.expressionManager

@@ -85,6 +85,92 @@ const SPINE_ALIASES: Record<string, string> = {
   'Spine2': 'Spine02',
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MIXAMO → VRM BONE MAPPING — Bridge between Mixamo FBX and VRM humanoid
+// ░▒▓ VRM uses its own standard names (hips, spine, chest, leftUpperArm...) ▓▒░
+// ░▒▓ Mixamo uses mixamorigHips, mixamorigSpine, mixamorigSpine1... ▓▒░
+// The normalized VRM skeleton from @pixiv/three-vrm names bones exactly
+// matching VRM standard (lowercase). This table maps Mixamo bare → VRM.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MIXAMO_TO_VRM: Record<string, string> = {
+  // Core
+  'Hips': 'hips', 'Spine': 'spine', 'Spine1': 'chest', 'Spine2': 'upperChest',
+  'Neck': 'neck', 'Head': 'head',
+  // Left arm
+  'LeftShoulder': 'leftShoulder', 'LeftArm': 'leftUpperArm',
+  'LeftForeArm': 'leftLowerArm', 'LeftHand': 'leftHand',
+  // Right arm
+  'RightShoulder': 'rightShoulder', 'RightArm': 'rightUpperArm',
+  'RightForeArm': 'rightLowerArm', 'RightHand': 'rightHand',
+  // Left leg
+  'LeftUpLeg': 'leftUpperLeg', 'LeftLeg': 'leftLowerLeg',
+  'LeftFoot': 'leftFoot', 'LeftToeBase': 'leftToes',
+  // Right leg
+  'RightUpLeg': 'rightUpperLeg', 'RightLeg': 'rightLowerLeg',
+  'RightFoot': 'rightFoot', 'RightToeBase': 'rightToes',
+  // Fingers (left)
+  'LeftHandThumb1': 'leftThumbMetacarpal', 'LeftHandThumb2': 'leftThumbProximal', 'LeftHandThumb3': 'leftThumbDistal',
+  'LeftHandIndex1': 'leftIndexProximal', 'LeftHandIndex2': 'leftIndexIntermediate', 'LeftHandIndex3': 'leftIndexDistal',
+  'LeftHandMiddle1': 'leftMiddleProximal', 'LeftHandMiddle2': 'leftMiddleIntermediate', 'LeftHandMiddle3': 'leftMiddleDistal',
+  'LeftHandRing1': 'leftRingProximal', 'LeftHandRing2': 'leftRingIntermediate', 'LeftHandRing3': 'leftRingDistal',
+  'LeftHandPinky1': 'leftLittleProximal', 'LeftHandPinky2': 'leftLittleIntermediate', 'LeftHandPinky3': 'leftLittleDistal',
+  // Fingers (right)
+  'RightHandThumb1': 'rightThumbMetacarpal', 'RightHandThumb2': 'rightThumbProximal', 'RightHandThumb3': 'rightThumbDistal',
+  'RightHandIndex1': 'rightIndexProximal', 'RightHandIndex2': 'rightIndexIntermediate', 'RightHandIndex3': 'rightIndexDistal',
+  'RightHandMiddle1': 'rightMiddleProximal', 'RightHandMiddle2': 'rightMiddleIntermediate', 'RightHandMiddle3': 'rightMiddleDistal',
+  'RightHandRing1': 'rightRingProximal', 'RightHandRing2': 'rightRingIntermediate', 'RightHandRing3': 'rightRingDistal',
+  'RightHandPinky1': 'rightLittleProximal', 'RightHandPinky2': 'rightLittleIntermediate', 'RightHandPinky3': 'rightLittleDistal',
+}
+
+/**
+ * Retarget a Mixamo animation clip for a VRM model.
+ * Maps normalized Mixamo track names ("mixamorigHips.quaternion") to VRM
+ * humanoid bone names ("hips.quaternion") using the explicit mapping table.
+ *
+ * The @pixiv/three-vrm normalized skeleton names bones with VRM standard names.
+ * This bridges Mixamo FBX → VRM so walk/dance/combat clips Just Work™.
+ */
+export function retargetClipForVRM(
+  clip: THREE.AnimationClip,
+  cacheKey: string,
+): THREE.AnimationClip {
+  const fullKey = `vrm__${clip.name}__${cacheKey}`
+  if (retargetCache.has(fullKey)) {
+    return retargetCache.get(fullKey)!
+  }
+
+  let remapped = 0
+  let unmapped = 0
+
+  const tracks = clip.tracks.map(track => {
+    const dotIdx = track.name.indexOf('.')
+    if (dotIdx === -1) return track.clone()
+
+    const boneName = track.name.substring(0, dotIdx)
+    const property = track.name.substring(dotIdx)
+
+    // Strip "mixamorig" prefix to get bare Mixamo name
+    const bare = boneName.replace(/^mixamorig/, '')
+    const vrmName = MIXAMO_TO_VRM[bare]
+
+    if (vrmName) {
+      remapped++
+      const t = track.clone()
+      t.name = vrmName + property
+      return t
+    }
+
+    unmapped++
+    return track.clone()
+  })
+
+  const retargeted = new THREE.AnimationClip(clip.name, clip.duration, tracks)
+  retargetCache.set(fullKey, retargeted)
+  console.log(`[AnimLib:VRM] Retargeted "${clip.name}": ${remapped} mapped, ${unmapped} unmapped`)
+  return retargeted
+}
+
 /**
  * Build a mapping from normalized Mixamo track bone names → target skeleton bone names.
  *
