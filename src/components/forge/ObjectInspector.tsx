@@ -905,16 +905,16 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
           )
         })()}
 
-        {/* ░▒▓ ANIMATION SECTION (catalog + conjured objects with clips) ▓▒░ */}
-        {(resolved.type === 'catalog' || (resolved.type === 'conjured' && stats && stats.clips.length > 0)) && (
+        {/* ░▒▓ ANIMATION SECTION — conjured objects with baked clips only ▓▒░ */}
+        {(resolved.type === 'conjured' && stats && stats.clips.length > 0) && (
           <>
             <SectionHeader>&#9835; Animation</SectionHeader>
             <div className="rounded-lg border border-white/5 p-2 space-y-1.5" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
               <div className="text-[9px] text-gray-400 font-mono mb-1">
-                Animation clips detected at runtime
+                {stats.clips.length} baked clip{stats.clips.length > 1 ? 's' : ''} in model
               </div>
 
-              {/* Clip name input */}
+              {/* Clip name input — for baked clips in conjured models */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-500 font-mono w-16 shrink-0">clip</span>
                 <input
@@ -970,13 +970,34 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
               if (behavior.animation?.clipName === clipName) {
                 updateAnimation(undefined)
               } else {
-                // Trigger load (async, ConjuredObject will pick it up)
+                // Trigger load (async, ConjuredObject/VRMCatalogRenderer will pick it up)
                 loadAnimationClip(animId)
                 updateAnimation({ clipName, loop: 'repeat', speed: 1.0 })
               }
             }}
             onStopAnimation={() => updateAnimation(undefined)}
           />
+        )}
+
+        {/* Loop + speed controls for active library animation */}
+        {behavior.animation?.clipName?.startsWith(LIB_PREFIX) && (
+          <div className="rounded-lg border border-white/5 p-2 space-y-1.5" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-500 font-mono w-16 shrink-0">loop</span>
+              <PillSelector
+                value={behavior.animation.loop}
+                options={['once', 'repeat', 'pingpong'] as const}
+                onChange={(loop) => updateAnimation({ ...behavior.animation!, loop })}
+                labels={{ once: 'once', repeat: 'repeat', pingpong: 'ping-pong' }}
+              />
+            </div>
+            <ParamSlider
+              label="speed"
+              value={behavior.animation.speed}
+              min={0.25} max={2.0} step={0.05}
+              onChange={(speed) => updateAnimation({ ...behavior.animation!, speed })}
+            />
+          </div>
         )}
 
         {/* ░▒▓ ACTIONS ▓▒░ */}

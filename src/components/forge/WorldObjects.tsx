@@ -11,7 +11,7 @@
 'use client'
 
 import React, { Suspense, useRef, useState, useEffect, useCallback, useContext, useMemo } from 'react'
-import { useFrame, useLoader } from '@react-three/fiber'
+import { useFrame, useLoader, useThree } from '@react-three/fiber'
 import { TransformControls, useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
@@ -422,6 +422,11 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   const [showLabel, setShowLabel] = useState(false)
   const catalogProxyRef = useRef<THREE.Mesh>(null)
   const paintMode = useOasisStore(s => s.paintMode)
+  const behavior = useOasisStore(s => objectId ? s.behaviors[objectId] : undefined)
+  const { scene: threeScene } = useThree()
+
+  // RTS movement — same hook as CatalogModelRenderer; drives actual position interpolation
+  useMovement(groupRef, behavior?.movement, objectId, behavior?.moveTarget, behavior?.moveSpeed)
 
   // Per-NPC blink offset — hash objectId so they don't all blink in creepy unison
   const blinkOffset = useMemo(() => {
@@ -443,6 +448,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   })
 
   // Extract VRM + fix materials
+  // Re-runs when scene.environment changes (HDRI loads async — we need envMap set after it arrives)
   useEffect(() => {
     const loadedVrm = gltf.userData.vrm as VRM | undefined
     if (!loadedVrm) {
@@ -450,6 +456,8 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
       return
     }
     VRMUtils.rotateVRM0(loadedVrm)
+
+    const envMap = threeScene.environment
 
     // MToon + Standard + Basic IBL fix + shadows
     loadedVrm.scene.traverse((child) => {
@@ -459,20 +467,30 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         for (const mat of mats) {
           const m = mat as unknown as Record<string, unknown>
-          if ('giEqualizationFactor' in m) {
-            m.giEqualizationFactor = 0.9
-          }
-          if ('envMapIntensity' in m) {
-            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.5
-          }
+
+          // MToon: GI equalization lets IBL through
+          if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.9
+
           // MeshBasicMaterial can't receive light — swap to Standard
           if (mat.type === 'MeshBasicMaterial') {
             const basic = mat as THREE.MeshBasicMaterial
-            mesh.material = new THREE.MeshStandardMaterial({
+            const std = new THREE.MeshStandardMaterial({
               color: basic.color, map: basic.map,
               transparent: basic.transparent, opacity: basic.opacity,
               side: basic.side, roughness: 0.8, metalness: 0.0,
             })
+            if (envMap) std.envMap = envMap
+            std.envMapIntensity = 1.5
+            mesh.material = std
+            continue
+          }
+
+          // All other materials: boost envMapIntensity + set envMap if it was null
+          if ('envMapIntensity' in m) {
+            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.5
+          }
+          if (envMap && 'envMap' in m && !(m.envMap)) {
+            ;(mat as THREE.MeshStandardMaterial).envMap = envMap
           }
           mat.needsUpdate = true
         }
@@ -484,7 +502,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     vrmRef.current = loadedVrm
     setVrm(loadedVrm)
     console.log(`[VRM:NPC] ${displayName || path.split('/').pop()} — expressions: ${Object.keys(loadedVrm.expressionManager?.expressionMap || {}).length}, spring: ${loadedVrm.springBoneManager ? 'yes' : 'no'}`)
-  }, [gltf, path, displayName])
+  }, [gltf, path, displayName, threeScene.environment])
 
   // ░▒▓ WALK ANIMATION — Load from library, retarget for VRM skeleton ▓▒░
   const mixerRef = useRef<THREE.AnimationMixer | null>(null)
@@ -637,7 +655,8 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     })
     const box = new THREE.Box3().setFromObject(target)
     const dims = box.getSize(new THREE.Vector3())
-    setObjectMeshStats(objectId, { triangles: Math.floor(tris), vertices: verts, meshCount, materialCount: 0, boneCount: 0, dimensions: { w: dims.x, h: dims.y, d: dims.z }, clips: [], fileSize: 0 })
+    // boneCount:1 → AnimationLibrarySection visible; clips:[walk] → RTS right-click guard passes
+    setObjectMeshStats(objectId, { triangles: Math.floor(tris), vertices: verts, meshCount, materialCount: 0, boneCount: 1, dimensions: { w: dims.x, h: dims.y, d: dims.z }, clips: [{ name: 'walk', duration: 1 }], fileSize: 0 })
   }, [objectId, vrm, gltf.scene, setObjectMeshStats])
 
   const objectStats = useOasisStore(s => objectId ? s.objectMeshStats[objectId] : undefined)
