@@ -11,7 +11,7 @@
 'use client'
 
 import React, { Suspense, useRef, useState, useEffect, useCallback, useContext, useMemo } from 'react'
-import { useFrame, useLoader, useThree } from '@react-three/fiber'
+import { useFrame, useLoader } from '@react-three/fiber'
 import { TransformControls, useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
@@ -422,11 +422,8 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   const [showLabel, setShowLabel] = useState(false)
   const catalogProxyRef = useRef<THREE.Mesh>(null)
   const paintMode = useOasisStore(s => s.paintMode)
-  const behavior = useOasisStore(s => objectId ? s.behaviors[objectId] : undefined)
-  const { scene: threeScene } = useThree()
-
-  // RTS movement — same hook as CatalogModelRenderer; drives actual position interpolation
-  useMovement(groupRef, behavior?.movement, objectId, behavior?.moveTarget, behavior?.moveSpeed)
+  // NOTE: RTS movement (useMovement) is handled by SelectableWrapper which wraps this component.
+  // Do NOT call useMovement here — it would double-move a nested group causing drift.
 
   // Per-NPC blink offset — hash objectId so they don't all blink in creepy unison
   const blinkOffset = useMemo(() => {
@@ -447,8 +444,11 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     loader.register((parser) => new VRMLoaderPlugin(parser))
   })
 
-  // Extract VRM + fix materials
-  // Re-runs when scene.environment changes (HDRI loads async — we need envMap set after it arrives)
+  // IBL: applied lazily in useFrame once scene.environment is ready (HDRI loads async)
+  const iblAppliedRef = useRef(false)
+  useEffect(() => { iblAppliedRef.current = false }, [vrm]) // reset when avatar changes
+
+  // Extract VRM + fix non-IBL materials
   useEffect(() => {
     const loadedVrm = gltf.userData.vrm as VRM | undefined
     if (!loadedVrm) {
@@ -457,40 +457,32 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     }
     VRMUtils.rotateVRM0(loadedVrm)
 
-    const envMap = threeScene.environment
-
-    // MToon + Standard + Basic IBL fix + shadows
+    // MToon GI + shadows + MeshBasicMaterial swap (IBL envMap applied in useFrame once environment ready)
     loadedVrm.scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
-        mesh.raycast = () => {} // kill per-tri raycast
+        mesh.raycast = () => {} // kill per-tri raycast — proxy box handles clicks
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         for (const mat of mats) {
           const m = mat as unknown as Record<string, unknown>
 
-          // MToon: GI equalization lets IBL through
+          // MToon: GI equalization allows IBL to contribute
           if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.9
 
-          // MeshBasicMaterial can't receive light — swap to Standard
+          // MeshBasicMaterial can't receive ANY light — swap to Standard
           if (mat.type === 'MeshBasicMaterial') {
             const basic = mat as THREE.MeshBasicMaterial
-            const std = new THREE.MeshStandardMaterial({
+            mesh.material = new THREE.MeshStandardMaterial({
               color: basic.color, map: basic.map,
               transparent: basic.transparent, opacity: basic.opacity,
               side: basic.side, roughness: 0.8, metalness: 0.0,
+              envMapIntensity: 1.5,
             })
-            if (envMap) std.envMap = envMap
-            std.envMapIntensity = 1.5
-            mesh.material = std
             continue
           }
 
-          // All other materials: boost envMapIntensity + set envMap if it was null
           if ('envMapIntensity' in m) {
             ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.5
-          }
-          if (envMap && 'envMap' in m && !(m.envMap)) {
-            ;(mat as THREE.MeshStandardMaterial).envMap = envMap
           }
           mat.needsUpdate = true
         }
@@ -502,7 +494,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     vrmRef.current = loadedVrm
     setVrm(loadedVrm)
     console.log(`[VRM:NPC] ${displayName || path.split('/').pop()} — expressions: ${Object.keys(loadedVrm.expressionManager?.expressionMap || {}).length}, spring: ${loadedVrm.springBoneManager ? 'yes' : 'no'}`)
-  }, [gltf, path, displayName, threeScene.environment])
+  }, [gltf, path, displayName])
 
   // ░▒▓ WALK ANIMATION — Load from library, retarget for VRM skeleton ▓▒░
   const mixerRef = useRef<THREE.AnimationMixer | null>(null)
@@ -519,31 +511,30 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     return () => { mixer.stopAllAction(); mixerRef.current = null }
   }, [vrm])
 
-  // Load walk clip + retarget for VRM bones
+  // Load walk clip + retarget for THIS VRM's actual normalized bone names
   const [walkClip, setWalkClip] = useState<THREE.AnimationClip | null>(null)
   useEffect(() => {
     if (!vrm) return
+    // cacheKey = objectId (per-NPC) so each VRM gets its own retargeted clip
+    const key = objectId || 'vrm-npc'
     loadAnimationClip('walk').then(clip => {
-      if (clip) {
-        const retargeted = retargetClipForVRM(clip, 'vrm-npc')
-        setWalkClip(retargeted)
-      }
+      if (clip) setWalkClip(retargetClipForVRM(clip, vrm, key))
     })
-  }, [vrm])
+  }, [vrm, objectId])
 
   // Load explicit behavior animation (from ObjectInspector — dance, combat, etc.)
   const [behaviorClip, setBehaviorClip] = useState<THREE.AnimationClip | null>(null)
   useEffect(() => {
     const clipName = animConfig?.clipName
     if (!clipName || !vrm) { setBehaviorClip(null); return }
-    // Library animation (lib:walk, lib:breakdance, etc.)
     if (clipName.startsWith(LIB_PREFIX)) {
       const animId = clipName.replace(LIB_PREFIX, '')
+      const key = objectId || 'vrm-npc'
       loadAnimationClip(animId).then(clip => {
-        if (clip) setBehaviorClip(retargetClipForVRM(clip, 'vrm-npc'))
+        if (clip) setBehaviorClip(retargetClipForVRM(clip, vrm, key))
       })
     }
-  }, [animConfig?.clipName, vrm])
+  }, [animConfig?.clipName, vrm, objectId])
 
   // ░▒▓ Animation state machine — behavior > walk-during-move > idle ▓▒░
   useEffect(() => {
@@ -591,6 +582,25 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   useFrame((state, delta) => {
     const v = vrmRef.current
     if (!v) return
+
+    // ░▒▓ IBL: apply once environment is ready (HDRI loads async, can't rely on useEffect timing) ▓▒░
+    if (!iblAppliedRef.current && state.scene.environment) {
+      v.scene.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+          for (const mat of mats) {
+            const m = mat as any
+            if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.9
+            if ('envMapIntensity' in m && m.envMapIntensity < 1) m.envMapIntensity = 1.0
+            // Set envMap explicitly — Three.js uses scene.environment by default for Standard/Physical
+            // but some materials have envMap=null which opts out of that
+            if ('envMap' in m && !m.envMap) { m.envMap = state.scene.environment; mat.needsUpdate = true }
+          }
+        }
+      })
+      iblAppliedRef.current = true
+    }
 
     v.update(delta)
     mixerRef.current?.update(delta)
@@ -749,9 +759,9 @@ export function TransformKeyHandler() {
       }
 
       switch (e.key) {
-        case 'w': setTransformMode('translate'); break
-        case 'e': setTransformMode('rotate'); break
-        case 'r': setTransformMode('scale'); break
+        case 'r': setTransformMode('translate'); break
+        case 't': setTransformMode('rotate'); break
+        case 'y': setTransformMode('scale'); break
         // ░▒▓ Delete / Backspace — remove selected object from world ▓▒░
         case 'Delete':
         case 'Backspace': {
@@ -1226,10 +1236,18 @@ function CraftingInProgressVFX() {
   const allConjuredAssets = useOasisStore(s => s.conjuredAssets)
   const [progress, setProgress] = useState(0)
   const startRef = useRef(0)
+  // ░▒▓ RANDOM — resolved ONCE per craft start, stored in ref.
+  // Without this, re-renders (60fps from progress tick) would re-pick a new random
+  // type every frame, causing the infamous 50ms VFX cycling glitch.
+  const resolvedVfxRef = useRef<Exclude<ConjureVfxType, 'random'>>('textswirl')
 
   useEffect(() => {
     if (!craftingInProgress) { setProgress(0); return }
     startRef.current = performance.now()
+    // Resolve random VFX once at craft start — stable for the entire craft duration
+    resolvedVfxRef.current = conjureVfxType === 'random'
+      ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
+      : conjureVfxType
     let rafId: number
     const tick = () => {
       // Asymptotic progress — never reaches 100, slows as it approaches
@@ -1240,7 +1258,7 @@ function CraftingInProgressVFX() {
     }
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [craftingInProgress])
+  }, [craftingInProgress, conjureVfxType])
 
   if (!craftingInProgress) return null
 
@@ -1248,17 +1266,12 @@ function CraftingInProgressVFX() {
   const activeConjures = allConjuredAssets.filter(a => !['ready', 'failed'].includes(a.status)).length
   const craftX = activeConjures * 4 + (activeConjures > 0 ? 4 : 0)  // offset past all active conjurations
 
-  // ░▒▓ RANDOM — pick a random VFX for each craft ▓▒░
-  const resolvedVfx = conjureVfxType === 'random'
-    ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
-    : conjureVfxType
-
   return (
     <ConjureVFX
       position={[craftX, 0, 0]}
       prompt={craftingPrompt || 'crafting...'}
       progress={progress}
-      vfxType={resolvedVfx}
+      vfxType={resolvedVfxRef.current}
     />
   )
 }
@@ -1580,7 +1593,7 @@ export function WorldObjectsRenderer() {
       {selectedObjectId && (
         <Html position={[0, 0.5, 0]} center style={{ pointerEvents: 'none' }}>
           <div className="text-[10px] font-mono text-blue-400/60 bg-black/60 px-2 py-0.5 rounded whitespace-nowrap select-none">
-            {transformMode.toUpperCase()} | W/E/R switch | ESC deselect
+            {transformMode.toUpperCase()} | R/T/Y switch | ESC deselect
           </div>
         </Html>
       )}

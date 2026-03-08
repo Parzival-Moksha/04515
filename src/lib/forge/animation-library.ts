@@ -14,6 +14,7 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import * as THREE from 'three'
+import type { VRM } from '@pixiv/three-vrm'
 
 const OASIS_BASE = typeof window !== 'undefined'
   ? (process.env.NEXT_PUBLIC_BASE_PATH || '')
@@ -124,20 +125,33 @@ const MIXAMO_TO_VRM: Record<string, string> = {
 }
 
 /**
- * Retarget a Mixamo animation clip for a VRM model.
- * Maps normalized Mixamo track names ("mixamorigHips.quaternion") to VRM
- * humanoid bone names ("hips.quaternion") using the explicit mapping table.
+ * Retarget a Mixamo animation clip for a specific VRM model.
  *
- * The @pixiv/three-vrm normalized skeleton names bones with VRM standard names.
- * This bridges Mixamo FBX → VRM so walk/dance/combat clips Just Work™.
+ * WHY THIS NEEDS THE ACTUAL VRM OBJECT:
+ * three-vrm creates "normalized" proxy bones named "Normalized_" + ORIGINAL_BONE_NAME,
+ * where ORIGINAL_BONE_NAME is the raw GLTF bone name (e.g. "J_Bip_C_Hips" for VRoid,
+ * "Hips" for Mixamo-rigged VRMs). This is file-specific — we can't use a static table.
+ * The AnimationMixer targets bones by name in the scene. Using a wrong name = silent no-op.
+ *
+ * This function queries vrm.humanoid.getNormalizedBoneNode(vrmBoneName) to get the actual
+ * node for each VRM humanoid bone, reads its .name, and retargets Mixamo tracks to that.
  */
 export function retargetClipForVRM(
   clip: THREE.AnimationClip,
+  vrm: VRM,
   cacheKey: string,
 ): THREE.AnimationClip {
-  const fullKey = `vrm__${clip.name}__${cacheKey}`
+  const fullKey = `vrm3__${clip.name}__${cacheKey}`
   if (retargetCache.has(fullKey)) {
     return retargetCache.get(fullKey)!
+  }
+
+  // Build per-VRM mapping: Mixamo bare name → actual normalized bone node name
+  // e.g. "Hips" → "Normalized_J_Bip_C_Hips" (for VRoid avatars)
+  const mixamoToNodeName: Record<string, string> = {}
+  for (const [mixamoBare, vrmBoneName] of Object.entries(MIXAMO_TO_VRM)) {
+    const node = vrm.humanoid.getNormalizedBoneNode(vrmBoneName as Parameters<typeof vrm.humanoid.getNormalizedBoneNode>[0])
+    if (node) mixamoToNodeName[mixamoBare] = node.name
   }
 
   let remapped = 0
@@ -150,14 +164,14 @@ export function retargetClipForVRM(
     const boneName = track.name.substring(0, dotIdx)
     const property = track.name.substring(dotIdx)
 
-    // Strip "mixamorig" prefix to get bare Mixamo name
+    // Strip "mixamorig" prefix → bare Mixamo name → actual node name in this VRM
     const bare = boneName.replace(/^mixamorig/, '')
-    const vrmName = MIXAMO_TO_VRM[bare]
+    const nodeName = mixamoToNodeName[bare]
 
-    if (vrmName) {
+    if (nodeName) {
       remapped++
       const t = track.clone()
-      t.name = vrmName + property
+      t.name = nodeName + property
       return t
     }
 
@@ -167,7 +181,7 @@ export function retargetClipForVRM(
 
   const retargeted = new THREE.AnimationClip(clip.name, clip.duration, tracks)
   retargetCache.set(fullKey, retargeted)
-  console.log(`[AnimLib:VRM] Retargeted "${clip.name}": ${remapped} mapped, ${unmapped} unmapped`)
+  console.log(`[AnimLib:VRM] Retargeted "${clip.name}" (${cacheKey}): ${remapped} bones mapped, ${unmapped} unmapped`)
   return retargeted
 }
 
