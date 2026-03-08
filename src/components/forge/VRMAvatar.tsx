@@ -28,7 +28,10 @@ export function VRMAvatar({
   const [vrm, setVrm] = useState<VRM | null>(null)
 
   // Load VRM via GLTFLoader + VRMLoaderPlugin
-  const gltf = useLoader(GLTFLoader, url, (loader) => {
+  // ░▒▓ #vrm suffix prevents cache poisoning from useGLTF (ModelPreviewPanel) ▓▒░
+  // Hash fragments aren't sent to the server — same file, different cache key.
+  const vrmUrl = url + '#vrm'
+  const gltf = useLoader(GLTFLoader, vrmUrl, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser))
   })
 
@@ -43,20 +46,36 @@ export function VRMAvatar({
     // Rotate the VRM model (VRM spec: model faces +Z, Three.js faces -Z)
     VRMUtils.rotateVRM0(loadedVrm)
 
-    // Fix materials: MToon shader needs GI equalization to respond to IBL
+    // Fix materials: MToon + Standard + Basic — ensure ALL respond to lighting
     loadedVrm.scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         for (const mat of mats) {
+          const m = mat as unknown as Record<string, unknown>
           // MToon: boost indirect light contribution (default can be 0 = no IBL response)
-          if ('giEqualizationFactor' in mat) {
-            ;(mat as Record<string, unknown>).giEqualizationFactor = 0.9
+          if ('giEqualizationFactor' in m) {
+            m.giEqualizationFactor = 0.9
           }
-          // Standard materials: ensure envMap intensity
-          if ('envMapIntensity' in mat) {
-            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.0
+          // Standard/Physical materials: ensure envMap intensity
+          if ('envMapIntensity' in m) {
+            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.5
           }
+          // MeshBasicMaterial doesn't respond to light at all — swap to Standard
+          if (mat.type === 'MeshBasicMaterial') {
+            const basic = mat as THREE.MeshBasicMaterial
+            const std = new THREE.MeshStandardMaterial({
+              color: basic.color,
+              map: basic.map,
+              transparent: basic.transparent,
+              opacity: basic.opacity,
+              side: basic.side,
+              roughness: 0.8,
+              metalness: 0.0,
+            })
+            mesh.material = std
+          }
+          mat.needsUpdate = true
         }
         mesh.castShadow = true
         mesh.receiveShadow = true

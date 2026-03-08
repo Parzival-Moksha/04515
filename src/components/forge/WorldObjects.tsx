@@ -431,7 +431,13 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   }, [objectId])
 
   // Load VRM via GLTFLoader + VRMLoaderPlugin
-  const gltf = useLoader(GLTFLoader, path, (loader) => {
+  // ░▒▓ #vrm suffix creates a separate cache key from useGLTF (ModelPreviewPanel) ▓▒░
+  // Without this, the preview panel poisons the Three.js loader cache: it loads VRM
+  // files with plain useGLTF (no VRM plugin), caching the result without VRM metadata.
+  // Then VRMCatalogRenderer gets the cached non-VRM result → gltf.userData.vrm is undefined → invisible.
+  // Hash fragments aren't sent to the server, so the same file is served.
+  const vrmUrl = path + '#vrm'
+  const gltf = useLoader(GLTFLoader, vrmUrl, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser))
   })
 
@@ -439,24 +445,35 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   useEffect(() => {
     const loadedVrm = gltf.userData.vrm as VRM | undefined
     if (!loadedVrm) {
-      console.warn('[VRM:NPC] No VRM data in', path)
+      console.warn('[VRM:NPC] No VRM data in', path, '— rendering as static GLB fallback')
       return
     }
     VRMUtils.rotateVRM0(loadedVrm)
 
-    // MToon IBL fix + shadows
+    // MToon + Standard + Basic IBL fix + shadows
     loadedVrm.scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         mesh.raycast = () => {} // kill per-tri raycast
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         for (const mat of mats) {
-          if ('giEqualizationFactor' in mat) {
-            ;(mat as Record<string, unknown>).giEqualizationFactor = 0.9
+          const m = mat as unknown as Record<string, unknown>
+          if ('giEqualizationFactor' in m) {
+            m.giEqualizationFactor = 0.9
           }
-          if ('envMapIntensity' in mat) {
-            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.0
+          if ('envMapIntensity' in m) {
+            ;(mat as THREE.MeshStandardMaterial).envMapIntensity = 1.5
           }
+          // MeshBasicMaterial can't receive light — swap to Standard
+          if (mat.type === 'MeshBasicMaterial') {
+            const basic = mat as THREE.MeshBasicMaterial
+            mesh.material = new THREE.MeshStandardMaterial({
+              color: basic.color, map: basic.map,
+              transparent: basic.transparent, opacity: basic.opacity,
+              side: basic.side, roughness: 0.8, metalness: 0.0,
+            })
+          }
+          mat.needsUpdate = true
         }
         mesh.castShadow = true
         mesh.receiveShadow = true
@@ -498,10 +515,11 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     }
   })
 
-  // Bounding box for proxy raycast
+  // Bounding box for proxy raycast — works with VRM scene or raw GLTF fallback
   const bounds = useMemo(() => {
-    if (!vrm) return { size: new THREE.Vector3(1, 2, 1), center: new THREE.Vector3(0, 1, 0) }
-    const box = new THREE.Box3().setFromObject(vrm.scene)
+    const target = vrm ? vrm.scene : gltf.scene
+    if (!target) return { size: new THREE.Vector3(1, 2, 1), center: new THREE.Vector3(0, 1, 0) }
+    const box = new THREE.Box3().setFromObject(target)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
     if (size.x < 0.5) size.x = 0.5
@@ -519,9 +537,10 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
   // Push mesh stats to Zustand for ObjectInspector
   const setObjectMeshStats = useOasisStore(s => s.setObjectMeshStats)
   useEffect(() => {
-    if (!objectId || !vrm) return
+    const target = vrm ? vrm.scene : gltf.scene
+    if (!objectId || !target) return
     let tris = 0, verts = 0, meshCount = 0
-    vrm.scene.traverse((child) => {
+    target.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         meshCount++
@@ -531,16 +550,17 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
         if (geo.attributes.position) verts += geo.attributes.position.count
       }
     })
-    const box = new THREE.Box3().setFromObject(vrm.scene)
+    const box = new THREE.Box3().setFromObject(target)
     const dims = box.getSize(new THREE.Vector3())
     setObjectMeshStats(objectId, { triangles: Math.floor(tris), vertices: verts, meshCount, materialCount: 0, boneCount: 0, dimensions: { w: dims.x, h: dims.y, d: dims.z }, clips: [], fileSize: 0 })
-  }, [objectId, vrm, setObjectMeshStats])
+  }, [objectId, vrm, gltf.scene, setObjectMeshStats])
 
   const objectStats = useOasisStore(s => objectId ? s.objectMeshStats[objectId] : undefined)
   const triCount = objectStats?.triangles || 0
   const labelName = displayName || 'VRM Avatar'
 
-  if (!vrm) return null
+  // The scene to render — VRM scene (with expressions/spring bones) or raw GLTF fallback
+  const renderScene = vrm ? vrm.scene : gltf.scene
 
   return (
     <group ref={groupRef}>
@@ -561,7 +581,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
         <boxGeometry args={[bounds.size.x * scale, bounds.size.y * scale, bounds.size.z * scale]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <primitive object={vrm.scene} scale={scale} />
+      <primitive object={renderScene} scale={scale} />
 
       {/* Hover glow ring */}
       {hovered && (

@@ -100,7 +100,8 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const { error } = await getServerSupabase()
+    const sb = getServerSupabase()
+    const { error } = await sb
       .from('profiles')
       .update(updates)
       .eq('id', session.user.id)
@@ -108,6 +109,19 @@ export async function PATCH(request: Request) {
     if (error) {
       console.error('[Profile] PATCH error:', error.message)
       return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
+    }
+
+    // ░▒▓ Sync display name to world cards — update cached creator_name on ALL user's worlds ▓▒░
+    // Without this, explore page + view mode show stale Google OAuth name instead of chosen display name.
+    if (updates.display_name) {
+      await sb
+        .from('worlds')
+        .update({ creator_name: updates.display_name as string })
+        .eq('user_id', session.user.id)
+        .then(({ error: worldErr }) => {
+          if (worldErr) console.error('[Profile] Failed to sync creator_name to worlds:', worldErr.message)
+          else console.log(`[Profile] Synced creator_name "${updates.display_name}" to all worlds`)
+        })
     }
 
     return NextResponse.json({ ok: true })
