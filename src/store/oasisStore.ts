@@ -157,7 +157,11 @@ interface OasisState {
 
   // ─═̷─═̷─👁️ VIEW MODE — read-only access to other users' worlds ─═̷─═̷─👁️
   isViewMode: boolean
-  viewingWorldMeta: { name: string; icon: string; creator_name?: string; creator_avatar?: string } | null
+  viewingWorldMeta: { name: string; icon: string; creator_name?: string; creator_avatar?: string; visibility?: string } | null
+  /** True when viewing a public_edit world — editing tools stay enabled */
+  isViewModeEditable: boolean
+  /** The world ID being viewed (needed for saving to public_edit worlds) */
+  viewingWorldId: string | null
 
   // ─═̷─═̷─⚙️ SETTINGS ACTIONS ─═̷─═̷─⚙️
   setFpsCounterEnabled: (enabled: boolean) => void
@@ -327,6 +331,8 @@ export const useOasisStore = create<OasisState>((set, get) => {
   // ─═̷─═̷─👁️ VIEW MODE ─═̷─═̷─👁️
   isViewMode: false,
   viewingWorldMeta: null,
+  isViewModeEditable: false,
+  viewingWorldId: null,
 
   // ─═̷─═̷─⏪ UNDO/REDO STATE ─═̷─═̷─⏪
   undoStack: [],
@@ -758,23 +764,28 @@ export const useOasisStore = create<OasisState>((set, get) => {
     })
   },
   saveWorldState: () => {
-    if (get().isViewMode) return // don't save someone else's world
+    // Don't save read-only viewed worlds — but DO save public_edit worlds
+    if (get().isViewMode && !get().isViewModeEditable) return
     // ░▒▓ CRITICAL GUARD: never save until world has loaded from Supabase ▓▒░
-    // Without this, a save during the mount→load gap writes empty state to the DB,
-    // nuking the entire world. This was the Alexandria bug.
     if (!get()._worldReady) {
       console.warn('[World] ⚠️ Save blocked — world not loaded yet (preventing empty-state overwrite)')
       return
     }
-    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground } = get()
-    debouncedSaveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground })
+    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, viewingWorldId } = get()
+    const worldState = { terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }
+    // If editing a public_edit world, save to THAT world (not user's own)
+    if (get().isViewModeEditable && viewingWorldId) {
+      saveWorld(worldState, viewingWorldId) // direct save to viewed world
+    } else {
+      debouncedSaveWorld(worldState)
+    }
   },
 
   // ─═̷─═̷─🌍 MULTI-WORLD ACTIONS ─═̷─═̷─🌍
   switchWorld: (worldId) => {
     // Exit view mode if active — user clicked one of their own worlds
     if (get().isViewMode) {
-      set({ isViewMode: false, viewingWorldMeta: null })
+      set({ isViewMode: false, isViewModeEditable: false, viewingWorldId: null, viewingWorldMeta: null })
     }
     // ░▒▓ RACE CONDITION FIX — kill any pending debounced saves from the OLD world ▓▒░
     // Without this, a stale save timer can fire AFTER the new world loads,
@@ -783,7 +794,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
     // Save current world first (immediate, not debounced) — but ONLY if world was loaded
     if (get()._worldReady) {
       const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
-      saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
+      // ░▒▓ Filter out in-progress craft placeholders — they have no objects yet.
+      // If we save them, the origin world gets a zombie empty scene that persists forever.
+      const completedScenes = craftedScenes.filter(s => s.name !== 'Crafting...' && s.objects.length > 0)
+      saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes: completedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
     }
 
     // ░▒▓ Block saves during transition — prevents empty state nuke ▓▒░
@@ -930,19 +944,22 @@ export const useOasisStore = create<OasisState>((set, get) => {
     }
 
     // Set view mode flag IMMEDIATELY — prevents initWorlds/loadWorldState from overwriting
-    set({ isViewMode: true, viewingWorldMeta: { name: 'Loading...', icon: '⏳' } })
+    set({ isViewMode: true, isViewModeEditable: false, viewingWorldId: worldId, viewingWorldMeta: { name: 'Loading...', icon: '⏳' } })
 
     loadPublicWorld(worldId).then(result => {
       if (!result) {
         console.error(`[ViewMode] World ${worldId} not found or not public`)
-        set({ isViewMode: false, viewingWorldMeta: null })
+        set({ isViewMode: false, isViewModeEditable: false, viewingWorldId: null, viewingWorldMeta: null })
         return
       }
       const { state, meta } = result
+      const isEditable = meta.visibility === 'public_edit'
       const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
       const lights = state.lights !== undefined ? state.lights : defaultLights
       set({
-        viewingWorldMeta: { name: meta.name, icon: meta.icon, creator_name: meta.creator_name, creator_avatar: meta.creator_avatar },
+        _worldReady: isEditable, // Allow saves for public_edit worlds
+        isViewModeEditable: isEditable,
+        viewingWorldMeta: { name: meta.name, icon: meta.icon, creator_name: meta.creator_name, creator_avatar: meta.creator_avatar, visibility: meta.visibility },
         terrainParams: state.terrain || null,
         groundPresetId: state.groundPresetId || 'none',
         groundTiles: state.groundTiles || {},
@@ -964,7 +981,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
 
   exitViewMode: () => {
     if (!get().isViewMode) return
-    set({ isViewMode: false, viewingWorldMeta: null })
+    set({ isViewMode: false, isViewModeEditable: false, viewingWorldId: null, viewingWorldMeta: null })
     // Reload user's own active world
     get().loadWorldState()
     console.log('[ViewMode] Exited — back to own world')

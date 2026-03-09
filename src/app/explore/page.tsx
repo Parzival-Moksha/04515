@@ -25,10 +25,33 @@ const LB_API_BASE = typeof window !== 'undefined'
   ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/leaderboard`
   : '/api/leaderboard'
 
+const PROFILE_API = typeof window !== 'undefined'
+  ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/profile`
+  : '/api/profile'
+
 function getInitialTab(): PageTab {
   if (typeof window === 'undefined') return 'worlds'
   const params = new URLSearchParams(window.location.search)
   return params.get('tab') === 'leaderboard' ? 'leaderboard' : 'worlds'
+}
+
+// ─═̷─ Profile badge — fetches real display_name from Supabase, not stale OAuth name ─═̷─
+function ProfileHeaderBadge() {
+  const [profile, setProfile] = useState<{ displayName: string; avatar_url: string | null } | null>(null)
+  useEffect(() => {
+    fetch(PROFILE_API).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) setProfile({ displayName: d.displayName, avatar_url: d.avatar_url })
+    }).catch(() => {})
+  }, [])
+  if (!profile) return null
+  return (
+    <div className="flex items-center gap-2 text-sm text-gray-400">
+      {profile.avatar_url && (
+        <img src={profile.avatar_url} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+      )}
+      <span className="hidden sm:inline">{profile.displayName}</span>
+    </div>
+  )
 }
 
 export default function ExplorePage() {
@@ -52,12 +75,7 @@ export default function ExplorePage() {
           </div>
           <div className="flex items-center gap-3">
             {session?.user ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                {session.user.image && (
-                  <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                )}
-                <span className="hidden sm:inline">{session.user.name}</span>
-              </div>
+              <ProfileHeaderBadge />
             ) : (
               <button
                 onClick={() => router.push('/login')}
@@ -484,6 +502,12 @@ function WorldCard({
         {isOwn && (
           <div className="absolute top-2 left-2 bg-orange-500/80 px-2 py-0.5 rounded text-xs text-white font-bold">
             YOUR WORLD
+          </div>
+        )}
+        {/* Open Build badge */}
+        {world.visibility === 'public_edit' && !isOwn && (
+          <div className="absolute top-2 left-2 bg-green-500/80 px-2 py-0.5 rounded text-xs text-white font-bold">
+            OPEN BUILD
           </div>
         )}
       </div>

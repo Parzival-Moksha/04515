@@ -11,8 +11,15 @@ import { useOasisStore } from '../../store/oasisStore'
 import type { WorldVisibility } from '@/lib/xp'
 
 const WORLD_ICONS = ['🌍', '🌋', '🏔️', '🌊', '🏜️', '🌌', '🪐', '🌙', '🏰', '⛩️']
-const VISIBILITY_ICONS: Record<WorldVisibility, string> = { private: '🔒', public: '🌐', unlisted: '🔗' }
-const VISIBILITY_CYCLE: WorldVisibility[] = ['private', 'public', 'unlisted']
+const VISIBILITY_OPTIONS: { value: WorldVisibility; icon: string; label: string; desc: string }[] = [
+  { value: 'private', icon: '🔒', label: 'Private', desc: 'Only you' },
+  { value: 'unlisted', icon: '🔗', label: 'Unlisted', desc: 'Link only' },
+  { value: 'public', icon: '🌐', label: 'Public', desc: 'Read-only' },
+  { value: 'public_edit', icon: '✏️', label: 'Open Build', desc: 'Anyone edits' },
+]
+const VISIBILITY_ICONS: Record<WorldVisibility, string> = Object.fromEntries(
+  VISIBILITY_OPTIONS.map(o => [o.value, o.icon])
+) as Record<WorldVisibility, string>
 
 export function RealmSelector() {
   const [expanded, setExpanded] = useState(false)
@@ -32,6 +39,8 @@ export function RealmSelector() {
   const createNewWorld = useOasisStore(s => s.createNewWorld)
   const deleteWorldById = useOasisStore(s => s.deleteWorldById)
   const refreshWorldRegistry = useOasisStore(s => s.refreshWorldRegistry)
+  const isViewMode = useOasisStore(s => s.isViewMode)
+  const viewingWorldMeta = useOasisStore(s => s.viewingWorldMeta)
 
   // Visibility state (cached locally, synced from worldRegistry.visibility)
   const [visibilityMap, setVisibilityMap] = useState<Record<string, WorldVisibility>>({})
@@ -43,10 +52,13 @@ export function RealmSelector() {
     setVisibilityMap(map)
   }, [worldRegistry])
 
-  const toggleVisibility = useCallback(async (worldId: string) => {
+  // Which world has its visibility dropdown open
+  const [visDropdownId, setVisDropdownId] = useState<string | null>(null)
+
+  const setVisibility = useCallback(async (worldId: string, next: WorldVisibility) => {
     const current = visibilityMap[worldId] || 'private'
-    const nextIdx = (VISIBILITY_CYCLE.indexOf(current) + 1) % VISIBILITY_CYCLE.length
-    const next = VISIBILITY_CYCLE[nextIdx]
+    setVisDropdownId(null)
+    if (next === current) return
     // Optimistic update
     setVisibilityMap(prev => ({ ...prev, [worldId]: next }))
     try {
@@ -70,6 +82,7 @@ export function RealmSelector() {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setExpanded(false)
         setShowNewWorld(false)
+        setVisDropdownId(null)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -115,9 +128,11 @@ export function RealmSelector() {
     setExpanded(false)
   }
 
-  // Current world label
+  // Current world label — show viewed world when in view mode
   const currentWorld = worldRegistry.find(w => w.id === activeWorldId)
-  const currentLabel = { icon: currentWorld?.icon || '🔥', name: currentWorld?.name || 'The Forge', color: '#F97316' }
+  const currentLabel = isViewMode && viewingWorldMeta
+    ? { icon: viewingWorldMeta.icon, name: viewingWorldMeta.name, color: '#A855F7' }  // purple for viewing
+    : { icon: currentWorld?.icon || '🔥', name: currentWorld?.name || 'The Forge', color: '#F97316' }
 
   return (
     <div
@@ -169,6 +184,25 @@ export function RealmSelector() {
             overflowY: 'auto',
           }}
         >
+          {/* View mode banner — shows when viewing another user's world */}
+          {isViewMode && viewingWorldMeta && (
+            <div className="px-4 py-2.5 border-b border-purple-500/20 bg-purple-900/10">
+              <div className="flex items-center gap-2">
+                {viewingWorldMeta.creator_avatar && (
+                  <img src={viewingWorldMeta.creator_avatar} alt="" className="w-5 h-5 rounded-full" referrerPolicy="no-referrer" />
+                )}
+                <div className="text-xs">
+                  <span className="text-purple-400">Viewing </span>
+                  <span className="text-white font-medium">{viewingWorldMeta.icon} {viewingWorldMeta.name}</span>
+                  {viewingWorldMeta.creator_name && (
+                    <span className="text-gray-500"> by {viewingWorldMeta.creator_name}</span>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-600 mt-1">Click any of your worlds below to exit</p>
+            </div>
+          )}
+
           {/* Explore link */}
           <button
             onClick={() => { window.open('/explore', '_blank'); setExpanded(false) }}
@@ -233,14 +267,43 @@ export function RealmSelector() {
                 >
                   ✏️
                 </button>
-                {/* Visibility toggle */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleVisibility(world.id) }}
-                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 px-1.5 py-1 text-xs transition-opacity"
-                  title={`${visibilityMap[world.id] || 'private'} — click to change`}
-                >
-                  {VISIBILITY_ICONS[visibilityMap[world.id] || 'private']}
-                </button>
+                {/* Visibility dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setVisDropdownId(visDropdownId === world.id ? null : world.id) }}
+                    className="opacity-0 group-hover:opacity-70 hover:!opacity-100 px-1.5 py-1 text-xs transition-opacity"
+                    title={`${visibilityMap[world.id] || 'private'} — click to change`}
+                  >
+                    {VISIBILITY_ICONS[visibilityMap[world.id] || 'private']}
+                  </button>
+                  {visDropdownId === world.id && (
+                    <div
+                      className="absolute right-0 top-full mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
+                      style={{ background: 'rgba(15,15,15,0.97)', border: '1px solid rgba(255,255,255,0.12)', minWidth: '160px' }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {VISIBILITY_OPTIONS.map(opt => {
+                        const isActive = (visibilityMap[world.id] || 'private') === opt.value
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => setVisibility(world.id, opt.value)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors ${
+                              isActive ? 'bg-purple-600/20 text-purple-300' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            <span className="text-sm">{opt.icon}</span>
+                            <div>
+                              <div className="font-medium">{opt.label}</div>
+                              <div className="text-[10px] text-gray-600">{opt.desc}</div>
+                            </div>
+                            {isActive && <span className="ml-auto text-purple-400 text-[10px]">●</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
                 {/* Delete button (not for default world) */}
                 {worldRegistry.length > 1 && (
                   <button

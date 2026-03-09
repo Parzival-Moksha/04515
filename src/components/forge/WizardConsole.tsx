@@ -825,8 +825,10 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
           const { loadWorld, saveWorld } = await import('../../lib/forge/world-persistence')
           const originState = await loadWorld(originWorldId)
           if (originState) {
-            const updatedScenes = [...(originState.craftedScenes || []), finalScene]
-            await saveWorld({ ...originState, craftedScenes: updatedScenes }, originWorldId)
+            // Filter out the placeholder (sceneId) in case it snuck into Supabase
+            // during the world switch save, then append the completed final scene.
+            const withoutPlaceholder = (originState.craftedScenes || []).filter((s: { id: string }) => s.id !== sceneId)
+            await saveWorld({ ...originState, craftedScenes: [...withoutPlaceholder, finalScene] }, originWorldId)
           }
         } catch (saveErr) {
           console.error('[Forge:Craft:Stream] Failed to save to origin world:', saveErr)
@@ -1324,7 +1326,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
 
       {/* Terrain info bar removed — now inline in World tab */}
 
-      {/* Transform controls bar moved to ObjectInspector — W/E/R hotkeys still work globally */}
+      {/* Transform controls bar moved to ObjectInspector — R/T/Y hotkeys still work globally */}
 
       {/* ─═̷─═̷─ CRAFT SPELL INPUT (only in craft mode — conjure has inline inputs) ─═̷─═̷─ */}
       {mode === 'craft' && (

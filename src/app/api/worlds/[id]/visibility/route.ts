@@ -1,6 +1,6 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 // VISIBILITY API — Toggle world privacy
-// PUT /api/worlds/[id]/visibility { visibility: 'private' | 'public' | 'unlisted' }
+// PUT /api/worlds/[id]/visibility { visibility: 'private' | 'public' | 'unlisted' | 'public_edit' }
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,7 +9,7 @@ import { setWorldVisibility } from '@/lib/forge/world-server'
 import { XP_AWARDS } from '@/lib/xp'
 import { getServerSupabase } from '@/lib/supabase'
 
-const VALID_VISIBILITY = ['private', 'public', 'unlisted'] as const
+const VALID_VISIBILITY = ['private', 'public', 'unlisted', 'public_edit'] as const
 
 export async function PUT(
   req: NextRequest,
@@ -25,13 +25,13 @@ export async function PUT(
     const body = await req.json() as { visibility: string }
 
     if (!body.visibility || !VALID_VISIBILITY.includes(body.visibility as typeof VALID_VISIBILITY[number])) {
-      return NextResponse.json({ error: 'Invalid visibility. Use: private, public, unlisted' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid visibility. Use: private, public, unlisted, public_edit' }, { status: 400 })
     }
 
-    const visibility = body.visibility as 'private' | 'public' | 'unlisted'
+    const visibility = body.visibility as 'private' | 'public' | 'unlisted' | 'public_edit'
     await setWorldVisibility(worldId, session.user.id, visibility)
 
-    // Award XP for first time setting a world to public
+    // Award XP for first time setting a world to public (not public_edit — those don't earn aura)
     if (visibility === 'public') {
       const sb = getServerSupabase()
       const { data: existing } = await sb

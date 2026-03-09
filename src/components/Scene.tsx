@@ -718,6 +718,9 @@ export default function Scene() {
   useWorldLoader()
 
   const isViewMode = useOasisStore(s => s.isViewMode)
+  const isViewModeEditable = useOasisStore(s => s.isViewModeEditable)
+  // Hide editing tools when viewing read-only worlds (but show for public_edit)
+  const hideEditTools = isViewMode && !isViewModeEditable
 
   // ─═̷─═̷─✨─═̷─═̷─{ WIZARD CONSOLE + ASSET EXPLORER STATE }─═̷─═̷─✨─═̷─═̷─
   const [wizardOpen, setWizardOpen] = useState(true)
@@ -868,7 +871,7 @@ export default function Scene() {
         <SettingsGear>
           <SettingsContent />
         </SettingsGear>
-        {!isViewMode && (
+        {!hideEditTools && (
           <button
             onClick={() => setWizardOpen(prev => !prev)}
             className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
@@ -883,7 +886,7 @@ export default function Scene() {
             ✨
           </button>
         )}
-        {!isViewMode && (
+        {!hideEditTools && (
           <ActionLogButton
             onClick={() => setActionLogOpen(prev => !prev)}
             isOpen={actionLogOpen}
@@ -918,7 +921,7 @@ export default function Scene() {
       </div>
 
       {/* ✨ Wizard Console — hidden in view mode */}
-      {!isViewMode && (
+      {!hideEditTools && (
         <WizardConsole
           isOpen={wizardOpen}
           onClose={() => setWizardOpen(false)}
@@ -926,7 +929,7 @@ export default function Scene() {
       )}
 
       {/* 🔍 Object Inspector — hidden in view mode */}
-      {!isViewMode && (
+      {!hideEditTools && (
         <ObjectInspector
           isOpen={!!inspectedObjectId}
           onClose={() => setInspectedObject(null)}

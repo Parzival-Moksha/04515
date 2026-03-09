@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
 import {
-  loadWorld, saveWorld, deleteWorld, getRegistry, updateObjectCount,
+  loadWorld, saveWorld, savePublicEditWorld, deleteWorld, getRegistry, updateObjectCount,
   type WorldState,
 } from '@/lib/forge/world-server'
 
@@ -60,13 +60,35 @@ export async function PUT(request: Request, context: RouteContext) {
     const body = await request.json()
 
     const state = body as Omit<WorldState, 'version' | 'savedAt'>
-    await saveWorld(id, session.user.id, state)
+
+    // Check if this is the user's own world first (fast path)
+    // If not, check if it's a public_edit world (anyone can write)
+    const sb = getServerSupabase()
+    const { data: worldRow } = await sb
+      .from('worlds')
+      .select('user_id, visibility')
+      .eq('id', id)
+      .single()
+
+    if (!worldRow) {
+      return NextResponse.json({ error: 'World not found' }, { status: 404 })
+    }
+
+    if (worldRow.user_id === session.user.id) {
+      // Owner save — normal path
+      await saveWorld(id, session.user.id, state)
+    } else if (worldRow.visibility === 'public_edit') {
+      // Public edit world — anyone authenticated can save
+      await savePublicEditWorld(id, state)
+    } else {
+      return NextResponse.json({ error: 'Not authorized to edit this world' }, { status: 403 })
+    }
 
     // Sync object count for explorer cards (fire-and-forget)
     const objectCount = (state.conjuredAssetIds?.length || 0)
       + (state.catalogPlacements?.length || 0)
       + (state.craftedScenes?.length || 0)
-    updateObjectCount(id, session.user.id, objectCount).catch(() => {})
+    updateObjectCount(id, worldRow.user_id, objectCount).catch(() => {})
 
     return NextResponse.json({ ok: true, savedAt: new Date().toISOString() })
   } catch (err) {

@@ -29,7 +29,7 @@ function toWorldMeta(row: Record<string, unknown>): WorldMeta {
     id: row.id as string,
     name: row.name as string,
     icon: (row.icon as string) || '🌍',
-    visibility: (row.visibility as 'private' | 'public' | 'unlisted') || 'private',
+    visibility: (row.visibility as 'private' | 'public' | 'unlisted' | 'public_edit') || 'private',
     createdAt: row.created_at as string,
     lastSavedAt: row.updated_at as string,
   }
@@ -168,12 +168,12 @@ export async function deleteWorld(id: string, userId: string): Promise<void> {
 export async function setWorldVisibility(
   id: string,
   userId: string,
-  visibility: 'private' | 'public' | 'unlisted'
+  visibility: 'private' | 'public' | 'unlisted' | 'public_edit'
 ): Promise<void> {
   const now = new Date().toISOString()
 
-  // When setting to public, cache creator info for explorer cards
-  if (visibility === 'public') {
+  // When setting to public or public_edit, cache creator info for explorer cards
+  if (visibility === 'public' || visibility === 'public_edit') {
     const { data: profile } = await sb()
       .from('profiles')
       .select('display_name, name, avatar_url')
@@ -197,6 +197,38 @@ export async function setWorldVisibility(
       .eq('id', id)
       .eq('user_id', userId)
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAVE PUBLIC_EDIT — save to a public_edit world (any authenticated user)
+// Checks that the world exists AND has visibility='public_edit' before writing.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function savePublicEditWorld(
+  id: string,
+  state: Omit<WorldState, 'version' | 'savedAt'>
+): Promise<boolean> {
+  const now = new Date().toISOString()
+  const worldData: WorldState = {
+    version: 1,
+    ...state,
+    savedAt: now,
+  }
+
+  const { error, count } = await sb()
+    .from('worlds')
+    .update({
+      data: worldData,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('visibility', 'public_edit')
+
+  if (error) {
+    console.error(`[WorldServer] savePublicEditWorld(${id}) error:`, error.message)
+    return false
+  }
+  return true
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -227,7 +259,7 @@ export async function loadPublicWorld(id: string): Promise<{ state: WorldState; 
     .from('worlds')
     .select('id, name, icon, visibility, data, user_id, creator_name, creator_avatar, created_at, updated_at')
     .eq('id', id)
-    .in('visibility', ['public', 'unlisted'])
+    .in('visibility', ['public', 'unlisted', 'public_edit'])
     .single()
 
   if (error || !data?.data) return null

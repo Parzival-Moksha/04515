@@ -512,7 +512,7 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
         {/* ░▒▓ TRANSFORM — mode switcher + readout ▓▒░ */}
         <SectionHeader>&#9670; Transform</SectionHeader>
         <div className="rounded-lg border border-white/5 p-2 space-y-1.5" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
-          {/* T/R/S mode switcher — W/E/R hotkeys also work globally */}
+          {/* T/R/S mode switcher — R/T/Y hotkeys also work globally */}
           <div className="flex items-center gap-1 mb-1">
             {(['translate', 'rotate', 'scale'] as const).map(m => (
               <button

@@ -11,6 +11,7 @@ export interface ExploreWorld {
   id: string
   name: string
   icon: string
+  visibility: string  // 'public' | 'public_edit'
   creator_name: string
   creator_avatar: string | null
   user_id: string
@@ -36,11 +37,11 @@ export async function GET(req: NextRequest) {
 
     const sb = getServerSupabase()
 
-    // Base query: only public worlds
+    // Base query: public + public_edit worlds
     let query = sb
       .from('worlds')
-      .select('id, name, icon, user_id, creator_name, creator_avatar, visit_count, object_count, thumbnail_url, created_at, updated_at')
-      .eq('visibility', 'public')
+      .select('id, name, icon, user_id, visibility, creator_name, creator_avatar, visit_count, object_count, thumbnail_url, created_at, updated_at')
+      .in('visibility', ['public', 'public_edit'])
 
     // Search filter
     if (search) {
@@ -75,8 +76,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ worlds: [], total: 0 })
     }
 
-    // Get vote counts for these worlds
+    // Get vote counts + fresh profile data for these worlds
     const worldIds = worlds.map(w => w.id)
+    const uniqueUserIds = [...new Set(worlds.map(w => w.user_id))]
+
+    // Fetch fresh profile data (display_name, avatar_url) — never stale
+    const { data: profiles } = await sb
+      .from('profiles')
+      .select('id, display_name, name, avatar_url')
+      .in('id', uniqueUserIds)
+
+    const profileMap: Record<string, { name: string; avatar: string | null }> = {}
+    if (profiles) {
+      for (const p of profiles) {
+        profileMap[p.id] = {
+          name: p.display_name || p.name || 'Anonymous',
+          avatar: p.avatar_url,
+        }
+      }
+    }
 
     const { data: voteCounts } = await sb
       .from('world_votes')
@@ -112,8 +130,10 @@ export async function GET(req: NextRequest) {
       id: w.id,
       name: w.name,
       icon: w.icon || '🌍',
-      creator_name: w.creator_name || 'Anonymous',
-      creator_avatar: w.creator_avatar,
+      visibility: w.visibility,
+      // Prefer fresh profile data over cached world columns
+      creator_name: profileMap[w.user_id]?.name || w.creator_name || 'Anonymous',
+      creator_avatar: profileMap[w.user_id]?.avatar ?? w.creator_avatar,
       user_id: w.user_id,
       visit_count: w.visit_count || 0,
       object_count: w.object_count || 0,

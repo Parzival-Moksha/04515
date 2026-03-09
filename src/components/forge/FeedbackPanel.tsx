@@ -12,6 +12,8 @@ import { createPortal } from 'react-dom'
 import { useSession } from 'next-auth/react'
 import { SettingsContext } from '../scene-lib'
 import { awardXp } from '@/hooks/useXp'
+import { useAnorakAgent } from '@/hooks/useAnorakAgent'
+import { ThoughtStreamPopup } from '../stashed/ThoughtStream'
 
 interface FeedbackItem {
   id: number
@@ -65,6 +67,15 @@ function parseSilicon(silicon: string): { title: string; type: 'bug' | 'feature'
   }
 }
 
+// Extract Carbon + Silicon from stored feedback body format
+function extractCarbonSilicon(body: string | null): { carbon: string; silicon: string } | null {
+  if (!body) return null
+  const carbonMatch = body.match(/--- CARBON ---\s*([\s\S]*?)(?=\n\n--- SILICON ---|$)/)
+  const siliconMatch = body.match(/--- SILICON ---\s*([\s\S]*)$/)
+  if (!carbonMatch || !siliconMatch) return null
+  return { carbon: carbonMatch[1].trim(), silicon: siliconMatch[1].trim() }
+}
+
 export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { data: session } = useSession()
   const isAdmin = session?.user?.id === ADMIN_ID
@@ -73,6 +84,12 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [filter, setFilter] = useState<FilterType>('all')
   const [loading, setLoading] = useState(false)
+
+  // Anorak coding agent
+  const agent = useAnorakAgent()
+  const [agentStreamOpen, setAgentStreamOpen] = useState(false)
+  const [agentOpacity, setAgentOpacity] = useState(0.92)
+  const [codingItemId, setCodingItemId] = useState<number | null>(null)
 
   // Submit form state
   const [submitType, setSubmitType] = useState<'bug' | 'feature'>('bug')
@@ -326,6 +343,23 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
     } catch {}
   }
 
+  // ── Code This — launch Anorak agent on a feedback item ────
+  const handleCodeThis = (item: FeedbackItem) => {
+    const extracted = extractCarbonSilicon(item.body)
+    const carbon = extracted?.carbon || item.body || ''
+    const silicon = extracted?.silicon || `TYPE: ${item.type}\nTITLE: ${item.title}\nDESCRIPTION: ${item.body || 'No details provided'}`
+
+    setCodingItemId(item.id)
+    setAgentStreamOpen(true)
+    agent.startAgent({
+      title: item.title,
+      description: item.body || '',
+      carbon,
+      silicon,
+      model: 'opus',
+    })
+  }
+
   if (!isOpen || typeof document === 'undefined') return null
 
   const formatDate = (iso: string) => {
@@ -382,7 +416,8 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
   const panelHeight = tab === 'vibecode' ? 560 : 480
 
-  return createPortal(
+  return (<>
+    {createPortal(
     <div
       data-menu-portal="feedback-panel"
       className="fixed z-[9996] rounded-xl flex flex-col"
@@ -427,9 +462,29 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
             </button>
           </div>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-white text-xs cursor-pointer">
-          X
-        </button>
+        <div className="flex items-center gap-1.5">
+          {isAdmin && agent.isRunning && (
+            <button
+              onClick={() => setAgentStreamOpen(true)}
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 animate-pulse cursor-pointer hover:bg-purple-500/30"
+              title="Open Anorak's thought stream"
+            >
+              Stream
+            </button>
+          )}
+          {isAdmin && agent.status === 'done' && (
+            <button
+              onClick={() => setAgentStreamOpen(true)}
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30 cursor-pointer hover:bg-green-500/30"
+              title="View completed agent stream"
+            >
+              Done
+            </button>
+          )}
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xs cursor-pointer">
+            X
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -479,13 +534,27 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
                         <span className="text-[9px] text-gray-400">{item.user_name}</span>
                         <span className="text-[9px] text-gray-500">{formatDate(item.created_at)}</span>
                         {isAdmin ? (
-                          <button
-                            onClick={() => handleSetStatus(item.id, item.status)}
-                            className={`text-[9px] font-medium cursor-pointer hover:underline ${statusColors[item.status] || 'text-gray-500'}`}
-                            title="Click to cycle: open -> shipped -> wontfix"
-                          >
-                            {item.status}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleSetStatus(item.id, item.status)}
+                              className={`text-[9px] font-medium cursor-pointer hover:underline ${statusColors[item.status] || 'text-gray-500'}`}
+                              title="Click to cycle: open -> shipped -> wontfix"
+                            >
+                              {item.status}
+                            </button>
+                            <button
+                              onClick={() => handleCodeThis(item)}
+                              disabled={agent.isRunning}
+                              className={`text-[9px] font-bold cursor-pointer px-1.5 py-0.5 rounded transition-all ${
+                                codingItemId === item.id && agent.isRunning
+                                  ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40 animate-pulse'
+                                  : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'
+                              } disabled:opacity-40 disabled:cursor-not-allowed`}
+                              title="Launch Anorak coding agent on this item"
+                            >
+                              {codingItemId === item.id && agent.isRunning ? 'Coding...' : 'Code This'}
+                            </button>
+                          </>
                         ) : (
                           <span className={`text-[9px] font-medium ${statusColors[item.status] || 'text-gray-500'}`}>
                             {item.status}
@@ -700,5 +769,20 @@ export function FeedbackPanel({ isOpen, onClose }: { isOpen: boolean; onClose: (
       </div>
     </div>,
     document.body
-  )
+  )}
+  {/* Anorak ThoughtStream — admin-only agent consciousness terminal */}
+  {isAdmin && agentStreamOpen && typeof document !== 'undefined' && createPortal(
+    <ThoughtStreamPopup
+      thoughtEvents={agent.events}
+      activeLobe={agent.activeTool}
+      loopRunning={agent.isRunning}
+      isOpen={agentStreamOpen}
+      onClose={() => setAgentStreamOpen(false)}
+      opacity={agentOpacity}
+      onOpacityChange={setAgentOpacity}
+      isGlobalLive={agent.isRunning}
+    />,
+    document.body
+  )}
+  </>)
 }

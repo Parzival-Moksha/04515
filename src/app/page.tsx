@@ -10,6 +10,7 @@ import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { RealmSelector } from '@/components/realms/RealmSelector'
 import { useOasisStore } from '@/store/oasisStore'
+// View mode banner removed — user exits via world selector dropdown
 
 // Dynamic import to avoid SSR issues with Three.js
 const Scene = dynamic(() => import('@/components/Scene'), {
@@ -20,9 +21,6 @@ const Scene = dynamic(() => import('@/components/Scene'), {
 export default function OasisPage() {
   const switchWorld = useOasisStore(s => s.switchWorld)
   const enterViewMode = useOasisStore(s => s.enterViewMode)
-  const exitViewMode = useOasisStore(s => s.exitViewMode)
-  const isViewMode = useOasisStore(s => s.isViewMode)
-  const viewingWorldMeta = useOasisStore(s => s.viewingWorldMeta)
 
   // Handle ?world=xxx (switch to own world) and ?view=xxx (view public world)
   useEffect(() => {
@@ -53,30 +51,8 @@ export default function OasisPage() {
     <main className="w-full h-screen bg-black">
       <Scene />
 
-      {/* Realm selector — top center */}
+      {/* Realm selector — top center (also serves as exit from view mode) */}
       <RealmSelector />
-
-      {/* View mode banner — click to exit, or use world selector */}
-      {isViewMode && viewingWorldMeta && (
-        <div className="ui-overlay top-12 left-1/2 -translate-x-1/2 z-[9998]">
-          <div
-            className="flex items-center gap-3 px-4 py-2 bg-black/80 border border-purple-500/40 rounded-lg backdrop-blur-sm cursor-pointer hover:border-purple-400/60 transition-colors"
-            onClick={exitViewMode}
-            title="Click to return to your world"
-          >
-            {viewingWorldMeta.creator_avatar && (
-              <img src={viewingWorldMeta.creator_avatar} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-            )}
-            <span className="text-sm text-gray-300">
-              👁 Viewing <span className="text-white font-medium">{viewingWorldMeta.icon} {viewingWorldMeta.name}</span>
-              {viewingWorldMeta.creator_name && (
-                <span className="text-gray-500"> by {viewingWorldMeta.creator_name}</span>
-              )}
-            </span>
-            <span className="text-xs text-purple-400 ml-1">✕</span>
-          </div>
-        </div>
-      )}
 
       {/* Controls hint - bottom center */}
       <div className="ui-overlay bottom-4 left-1/2 -translate-x-1/2">
