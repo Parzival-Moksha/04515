@@ -4,7 +4,7 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import { create } from 'zustand'
-import type { ConjuredAsset, CraftedScene, CatalogPlacement, RealmId, ObjectBehavior, WorldLight, WorldLightType } from '../lib/conjure/types'
+import type { ConjuredAsset, CraftedScene, CatalogPlacement, RealmId, ObjectBehavior, WorldLight, WorldLightType, GeneratedImage } from '../lib/conjure/types'
 import { DEFAULT_WORLD_LIGHTS } from '../lib/conjure/types'
 import type { TerrainParams } from '../lib/forge/terrain-generator'
 import {
@@ -17,6 +17,8 @@ import {
 } from '../lib/forge/world-persistence'
 import { addToSceneLibrary, getSceneLibrary, removeFromSceneLibrary } from '../lib/forge/scene-library'
 import { awardXp } from '../hooks/useXp'
+import { getBrowserSupabase } from '../lib/supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // ─═̷─═̷─🏗️ SSR-SAFE LOCALSTORAGE ─═̷─═̷─🏗️
 // Next.js pre-renders on the server where `window` doesn't exist.
@@ -47,12 +49,16 @@ export type PlacementVfxType =
 const PLACEMENT_VFX_LIST: Exclude<PlacementVfxType, 'random'>[] = ['runeflash', 'sparkburst', 'portalring', 'sigilpulse', 'quantumcollapse', 'phoenixascension', 'dimensionalrift', 'crystalgenesis', 'meteorimpact', 'arcanebloom', 'voidanchor', 'stellarforge']
 
 export interface PlacementPending {
-  type: 'catalog' | 'conjured' | 'crafted' | 'library'
+  type: 'catalog' | 'conjured' | 'crafted' | 'library' | 'image'
   catalogId?: string
   name: string
   path?: string
   defaultScale?: number
   sceneId?: string
+  /** For image placements — URL to the generated image texture */
+  imageUrl?: string
+  /** Place image with a golden picture frame */
+  imageFrame?: boolean
 }
 
 export interface ActivePlacementVfx {
@@ -151,9 +157,19 @@ interface OasisState {
   activeWorldId: string
   worldRegistry: WorldMeta[]
   _worldReady: boolean               // ░▒▓ GUARD: true after first successful load from Supabase ▓▒░
+  _realtimeChannel: RealtimeChannel | null  // ░▒▓ Supabase Realtime — live Merlin updates ▓▒░
+  _isReceivingRemoteUpdate: boolean  // ░▒▓ true while applying Realtime payload — prevents save loop ▓▒░
 
   // ─═̷─═̷─🧑 AVATAR — RPM 3D avatar ─═̷─═̷─🧑
   avatar3dUrl: string | null
+
+  // ─═̷─═̷─🖼️ IMAGINE — text-to-image gallery ─═̷─═̷─🖼️
+  generatedImages: GeneratedImage[]
+  customGroundPresets: import('../lib/forge/ground-textures').GroundPreset[]
+  addGeneratedImage: (image: GeneratedImage) => void
+  removeGeneratedImage: (id: string) => void
+  addCustomGroundPreset: (preset: import('../lib/forge/ground-textures').GroundPreset) => void
+  removeCustomGroundPreset: (id: string) => void
 
   // ─═̷─═̷─👁️ VIEW MODE — read-only access to other users' worlds ─═̷─═̷─👁️
   isViewMode: boolean
@@ -189,6 +205,7 @@ interface OasisState {
   enterPlacementMode: (pending: PlacementPending) => void
   cancelPlacement: () => void
   placeCatalogAssetAt: (catalogId: string, name: string, path: string, defaultScale: number, position: [number, number, number]) => void
+  placeImageAt: (name: string, imageUrl: string, position: [number, number, number], framed?: boolean) => void
   placeLibrarySceneAt: (sceneId: string, position: [number, number, number]) => void
   setPlacementVfxType: (type: PlacementVfxType) => void
   setPlacementVfxDuration: (duration: number) => void
@@ -324,9 +341,15 @@ export const useOasisStore = create<OasisState>((set, get) => {
   activeWorldId: isBrowser ? getActiveWorldId() : 'forge-default',
   worldRegistry: [],
   _worldReady: false,  // ░▒▓ GUARD: prevents saving empty state before world loads from Supabase ▓▒░
+  _realtimeChannel: null,
+  _isReceivingRemoteUpdate: false,
 
   // ─═̷─═̷─🧑 AVATAR ─═̷─═̷─🧑
   avatar3dUrl: null,
+
+  // ─═̷─═̷─🖼️ IMAGINE — text-to-image ─═̷─═̷─🖼️
+  generatedImages: JSON.parse(stored('oasis-generated-images') || '[]') as GeneratedImage[],
+  customGroundPresets: JSON.parse(stored('oasis-custom-ground') || '[]') as import('../lib/forge/ground-textures').GroundPreset[],
 
   // ─═̷─═̷─👁️ VIEW MODE ─═̷─═̷─👁️
   isViewMode: false,
@@ -477,7 +500,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
   // ░▒▓ The ritual of placing objects into the world ▓▒░
   enterPlacementMode: (pending) => {
     // ░▒▓ Preload GLB while user picks a spot — kills Suspense flash ▓▒░
-    if (pending.path) {
+    if (pending.path && pending.type !== 'image') {
       import('@react-three/drei').then(drei => drei.useGLTF.preload(pending.path!))
     }
     set({ placementPending: pending })
@@ -488,6 +511,20 @@ export const useOasisStore = create<OasisState>((set, get) => {
     withUndo(`Place ${name}`, '📦', () => {
       const id = `catalog-${catalogId}-${Date.now()}`
       const placement: CatalogPlacement = { id, catalogId, name, glbPath: path, position, scale: defaultScale }
+      set(state => ({
+        placedCatalogAssets: [...state.placedCatalogAssets, placement],
+        placementPending: null,
+      }))
+    })
+    get().spawnPlacementVfx(position)
+    setTimeout(() => get().saveWorldState(), 100)
+    awardXp('PLACE_CATALOG_OBJECT', get().activeWorldId)
+  },
+
+  placeImageAt: (name, imageUrl, position, framed) => {
+    withUndo(`Place ${name}`, '🖼️', () => {
+      const id = `image-${Date.now()}`
+      const placement: CatalogPlacement = { id, catalogId: 'generated-image', name, glbPath: '', position, scale: 1, imageUrl, ...(framed && { imageFrame: true }) }
       set(state => ({
         placedCatalogAssets: [...state.placedCatalogAssets, placement],
         placementPending: null,
@@ -618,6 +655,38 @@ export const useOasisStore = create<OasisState>((set, get) => {
     })
     setTimeout(() => get().saveWorldState(), 100)
   },
+  // ─═̷─═̷─🖼️ IMAGINE ACTIONS ─═̷─═̷─🖼️
+  addGeneratedImage: (image) => {
+    set(s => {
+      const next = [...s.generatedImages, image]
+      persist('oasis-generated-images', JSON.stringify(next))
+      return { generatedImages: next }
+    })
+  },
+  removeGeneratedImage: (id) => {
+    set(s => {
+      const next = s.generatedImages.filter(i => i.id !== id)
+      persist('oasis-generated-images', JSON.stringify(next))
+      return { generatedImages: next }
+    })
+  },
+  addCustomGroundPreset: (preset) => {
+    set(s => {
+      // Don't add duplicates
+      if (s.customGroundPresets.some(p => p.id === preset.id)) return s
+      const next = [...s.customGroundPresets, preset]
+      persist('oasis-custom-ground', JSON.stringify(next))
+      return { customGroundPresets: next }
+    })
+  },
+  removeCustomGroundPreset: (id) => {
+    set(s => {
+      const next = s.customGroundPresets.filter(p => p.id !== id)
+      persist('oasis-custom-ground', JSON.stringify(next))
+      return { customGroundPresets: next }
+    })
+  },
+
   selectObject: (selectedObjectId) => set({ selectedObjectId }),
   setInspectedObject: (inspectedObjectId) => set({ inspectedObjectId }),
   setTransformMode: (transformMode) => set({ transformMode }),
@@ -747,6 +816,11 @@ export const useOasisStore = create<OasisState>((set, get) => {
       // If lights field is undefined (old world never had lights) → seed with defaults
       // If lights is an array (even empty = user chose darkness) → respect it
       const lights = world.lights !== undefined ? world.lights : seedDefaultLights()
+      // Merge world's custom ground presets into user's collection (no duplicates)
+      const existingCustomIds = new Set(get().customGroundPresets.map(p => p.id))
+      const newCustom = (world.customGroundPresets || []).filter((p: import('../lib/forge/ground-textures').GroundPreset) => !existingCustomIds.has(p.id))
+      const mergedCustom = [...get().customGroundPresets, ...newCustom]
+      if (newCustom.length > 0) persist('oasis-custom-ground', JSON.stringify(mergedCustom))
       set({
         _worldReady: true,
         terrainParams: world.terrain || null,
@@ -759,20 +833,63 @@ export const useOasisStore = create<OasisState>((set, get) => {
         behaviors: world.behaviors || {},
         worldLights: lights,
         worldSkyBackground: world.skyBackgroundId || 'night007',
+        customGroundPresets: mergedCustom,
       })
       console.log('[World] Loaded:', world.savedAt, '| preset:', world.groundPresetId || 'none', '| tiles:', Object.keys(world.groundTiles || {}).length, '| catalog:', world.catalogPlacements?.length || 0, '| lights:', lights.length, '| sky:', world.skyBackgroundId || 'night007')
     })
+
+    // ░▒▓ REALTIME — subscribe to Merlin/remote updates for the active world ▓▒░
+    // Read-only subscription: only mutates local Zustand state, never writes to DB.
+    // _isReceivingRemoteUpdate flag prevents the Zustand subscriber from triggering
+    // a save loop when we apply the incoming payload.
+    if (isBrowser) {
+      const worldId = getActiveWorldId()
+      // Tear down any existing channel first (world switches, HMR, etc.)
+      get()._realtimeChannel?.unsubscribe()
+      const channel = getBrowserSupabase()
+        .channel(`world-${worldId}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'worlds', filter: `id=eq.${worldId}` },
+          (payload) => {
+            if (get()._isReceivingRemoteUpdate) return // already applying
+            const newData = (payload.new as Record<string, unknown>).data as import('../lib/forge/world-persistence').WorldState
+            if (!newData) return
+            console.log('[Realtime] Remote world update received — applying Merlin/admin patch')
+            const defaultLights = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
+            set({
+              _isReceivingRemoteUpdate: true,
+              placedCatalogAssets: newData.catalogPlacements || [],
+              craftedScenes: newData.craftedScenes || [],
+              worldLights: newData.lights ?? defaultLights,
+              worldSkyBackground: newData.skyBackgroundId || 'night007',
+              groundPresetId: newData.groundPresetId || 'none',
+              groundTiles: newData.groundTiles || {},
+              transforms: newData.transforms || {},
+              behaviors: newData.behaviors || {},
+            })
+            set({ _isReceivingRemoteUpdate: false })
+          }
+        )
+        .subscribe()
+      set({ _realtimeChannel: channel })
+    }
   },
   saveWorldState: () => {
     // Don't save read-only viewed worlds — but DO save public_edit worlds
     if (get().isViewMode && !get().isViewModeEditable) return
+    // Skip saves while applying a remote Realtime update — prevents echo loop
+    if (get()._isReceivingRemoteUpdate) return
     // ░▒▓ CRITICAL GUARD: never save until world has loaded from Supabase ▓▒░
     if (!get()._worldReady) {
       console.warn('[World] ⚠️ Save blocked — world not loaded yet (preventing empty-state overwrite)')
       return
     }
-    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, viewingWorldId } = get()
-    const worldState = { terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }
+    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, viewingWorldId, customGroundPresets } = get()
+    // Only include customGroundPresets in save if any tiles reference them
+    const usedCustomIds = new Set(Object.values(groundTiles).filter(id => id.startsWith('custom_')))
+    const relevantCustom = customGroundPresets.filter(p => usedCustomIds.has(p.id))
+    const worldState = { terrain: terrainParams, groundPresetId, groundTiles, craftedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground, ...(relevantCustom.length > 0 && { customGroundPresets: relevantCustom }) }
     // If editing a public_edit world, save to THAT world (not user's own)
     if (get().isViewModeEditable && viewingWorldId) {
       saveWorld(worldState, viewingWorldId) // direct save to viewed world
@@ -791,12 +908,16 @@ export const useOasisStore = create<OasisState>((set, get) => {
     // Without this, a stale save timer can fire AFTER the new world loads,
     // overwriting the new world's lights/sky with the old world's stale state.
     cancelPendingSave()
+    // Tear down Realtime subscription for the old world
+    get()._realtimeChannel?.unsubscribe()
+    set({ _realtimeChannel: null })
     // Save current world first (immediate, not debounced) — but ONLY if world was loaded
     if (get()._worldReady) {
       const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, activeWorldId } = get()
-      // ░▒▓ Filter out in-progress craft placeholders — they have no objects yet.
-      // If we save them, the origin world gets a zombie empty scene that persists forever.
-      const completedScenes = craftedScenes.filter(s => s.name !== 'Crafting...' && s.objects.length > 0)
+      // ░▒▓ Filter out in-progress craft placeholders — objects.length === 0 means
+      // the LLM hasn't materialized anything yet. Using objects.length (not name)
+      // because the scene name gets updated mid-stream before objects arrive.
+      const completedScenes = craftedScenes.filter(s => s.objects.length > 0)
       saveWorld({ terrain: terrainParams, groundPresetId, groundTiles, craftedScenes: completedScenes, conjuredAssetIds: worldConjuredAssetIds, catalogPlacements: placedCatalogAssets, transforms, behaviors, lights: worldLights, skyBackgroundId: worldSkyBackground }, activeWorldId)
     }
 
@@ -834,6 +955,37 @@ export const useOasisStore = create<OasisState>((set, get) => {
       })
       persist('oasis-realm', 'forge')
       console.log(`[World] Switched to: ${worldId}`, world ? `(terrain: ${!!world.terrain}, scenes: ${world.craftedScenes?.length || 0}, assets: ${world.conjuredAssetIds?.length || 0}, catalog: ${world.catalogPlacements?.length || 0}, sky: ${world.skyBackgroundId || 'night007'})` : '(empty)')
+
+      // ░▒▓ REALTIME — subscribe to new world channel ▓▒░
+      if (isBrowser) {
+        const channel = getBrowserSupabase()
+          .channel(`world-${worldId}`)
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'worlds', filter: `id=eq.${worldId}` },
+            (payload) => {
+              if (get()._isReceivingRemoteUpdate) return
+              const newData = (payload.new as Record<string, unknown>).data as import('../lib/forge/world-persistence').WorldState
+              if (!newData) return
+              console.log('[Realtime] Remote world update — applying after world switch')
+              const defaultLights = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
+              set({
+                _isReceivingRemoteUpdate: true,
+                placedCatalogAssets: newData.catalogPlacements || [],
+                craftedScenes: newData.craftedScenes || [],
+                worldLights: newData.lights ?? defaultLights,
+                worldSkyBackground: newData.skyBackgroundId || 'night007',
+                groundPresetId: newData.groundPresetId || 'none',
+                groundTiles: newData.groundTiles || {},
+                transforms: newData.transforms || {},
+                behaviors: newData.behaviors || {},
+              })
+              set({ _isReceivingRemoteUpdate: false })
+            }
+          )
+          .subscribe()
+        set({ _realtimeChannel: channel })
+      }
     })
   },
 

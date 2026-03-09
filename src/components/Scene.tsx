@@ -498,11 +498,9 @@ function OrbitTargetSphere({ controlsRef }: { controlsRef: React.RefObject<any> 
       <mesh renderOrder={999}>
         <sphereGeometry args={[0.03, 16, 16]} />
         <meshStandardMaterial
-          color="#c0c0d0"
-          metalness={0.92}
-          roughness={0.12}
-          transparent
-          opacity={0.95}
+          color="#d0d0e0"
+          metalness={1.0}
+          roughness={0.05}
           depthTest={false}
         />
       </mesh>
@@ -732,6 +730,10 @@ export default function Scene() {
   const orbitControlsRef = useRef<any>(null)
 
   const updateSetting = <K extends keyof OasisSettings>(key: K, value: OasisSettings[K]) => {
+    // Auto-exit pointer lock when switching to orbit mode
+    if (key === 'controlMode' && value === 'orbit' && document.pointerLockElement) {
+      document.exitPointerLock()
+    }
     setSettings(prev => ({ ...prev, [key]: value }))
   }
 
@@ -740,10 +742,14 @@ export default function Scene() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && e.code === 'KeyC') {
         e.preventDefault()
-        setSettings(prev => ({
-          ...prev,
-          controlMode: prev.controlMode === 'orbit' ? 'fps' : 'orbit',
-        }))
+        setSettings(prev => {
+          const next = prev.controlMode === 'orbit' ? 'fps' : 'orbit'
+          // Auto-exit pointer lock when switching to orbit — no right-click needed
+          if (next === 'orbit' && document.pointerLockElement) {
+            document.exitPointerLock()
+          }
+          return { ...prev, controlMode: next }
+        })
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -784,6 +790,7 @@ export default function Scene() {
       camera={{ position: [12, 10, 12], fov: 50, near: 0.1, far: 500 }}
       gl={{ antialias: true }}
       onPointerMissed={() => {
+        if (document.pointerLockElement) return  // FPS mode — click locks pointer, not deselects
         selectObject(null)
       }}
     >

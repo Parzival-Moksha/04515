@@ -28,6 +28,63 @@ import { extractModelStats } from './ModelPreview'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm'
 import { loadAnimationClip, retargetClipForVRM, LIB_PREFIX } from '../../lib/forge/animation-library'
+import type { PlacementPending } from '../../store/oasisStore'
+
+// ░▒▓ CLIPBOARD — module-level, survives across renders, no reactivity needed ▓▒░
+let _clipboard: PlacementPending | null = null
+
+// ░▒▓ COPY TOAST — 3D floating "Copied!" text that rises and fades ▓▒░
+interface CopyToast { id: string; position: [number, number, number]; startedAt: number }
+let _copyToasts: CopyToast[] = []
+let _copyToastListeners: Set<() => void> = new Set()
+function spawnCopyToast(pos: [number, number, number]) {
+  const toast: CopyToast = { id: `ct-${Date.now()}`, position: [pos[0], pos[1] + 1, pos[2]], startedAt: Date.now() }
+  _copyToasts = [..._copyToasts, toast]
+  _copyToastListeners.forEach(fn => fn())
+  setTimeout(() => {
+    _copyToasts = _copyToasts.filter(t => t.id !== toast.id)
+    _copyToastListeners.forEach(fn => fn())
+  }, 1200)
+}
+
+function CopyToastRenderer() {
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    const listener = () => forceUpdate(n => n + 1)
+    _copyToastListeners.add(listener)
+    return () => { _copyToastListeners.delete(listener) }
+  }, [])
+
+  return <>
+    {_copyToasts.map(toast => <CopyToastItem key={toast.id} toast={toast} />)}
+  </>
+}
+
+function CopyToastItem({ toast }: { toast: CopyToast }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const startY = toast.position[1]
+  useFrame(() => {
+    if (!groupRef.current) return
+    const elapsed = (Date.now() - toast.startedAt) / 1000
+    const progress = Math.min(elapsed / 1.2, 1)
+    groupRef.current.position.y = startY + progress * 1.5
+  })
+  return (
+    <group ref={groupRef} position={toast.position}>
+      <Html center style={{ pointerEvents: 'none' }}>
+        <div style={{
+          color: '#22d3ee', fontFamily: 'monospace', fontWeight: 900, fontSize: '14px',
+          textShadow: '0 0 8px #06b6d4, 0 0 20px #0891b2, 0 0 40px #06b6d4',
+          letterSpacing: '0.2em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+          animation: 'copyToastFade 1.2s ease-out forwards',
+        }}>
+          ✦ COPIED ✦
+        </div>
+        <style>{`@keyframes copyToastFade { 0% { opacity: 0; transform: scale(0.5); } 15% { opacity: 1; transform: scale(1.1); } 30% { transform: scale(1); } 100% { opacity: 0; transform: scale(0.8) translateY(-10px); } }`}</style>
+      </Html>
+    </group>
+  )
+}
 
 const OASIS_BASE = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -92,6 +149,10 @@ export function SelectableWrapper({ id, children, selected, onSelect, transformM
   const commitUndoBatch = useOasisStore(s => s.commitUndoBatch)
   const controlsCallbackRef = useCallback((controls: any) => {
     if (!controls) return
+    // ░▒▓ Disable three.js built-in W/E/R keyboard handler ▓▒░
+    // It conflicts with WASD movement and our R/T/Y hotkeys (R=scale in three.js vs R=translate in ours).
+    // Mode is controlled exclusively via React props from the store.
+    controls.setMode = () => {}
     const callback = (event: { value: boolean }) => {
       if (event.value) {
         // ░▒▓ Drag start — capture world state for undo ▓▒░
@@ -175,7 +236,7 @@ class CatalogModelErrorBoundary extends React.Component<
             <boxGeometry args={[0.3, 0.3, 0.3]} />
             <meshBasicMaterial color="#ff6600" wireframe transparent opacity={0.5} />
           </mesh>
-          <Html position={[0, 0.5, 0]} center>
+          <Html position={[0, 0.5, 0]} center style={{ pointerEvents: 'none' }}>
             <div className="text-[9px] text-orange-400 font-mono bg-black/80 px-1.5 py-0.5 rounded whitespace-nowrap">
               {(this.props.name || 'model').slice(0, 25)} (missing)
             </div>
@@ -185,6 +246,58 @@ class CatalogModelErrorBoundary extends React.Component<
     }
     return this.props.children
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// IMAGE PLANE RENDERER — Generated images as flat textured planes in the world
+// ░▒▓ A single quad, double-sided, bearing the vision Gemini dreamed ▓▒░
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function ImagePlaneRenderer({ imageUrl, scale, showFrame = false }: { imageUrl: string; scale: number; showFrame?: boolean }) {
+  const texture = useLoader(THREE.TextureLoader, imageUrl)
+  texture.colorSpace = THREE.SRGBColorSpace
+
+  // Aspect ratio from loaded image — default to 1:1 until texture loads
+  const aspect = texture.image ? texture.image.width / texture.image.height : 1
+  const planeWidth = scale * aspect
+  const planeHeight = scale
+  const frameDepth = 0.02 * scale
+  const frameBorder = 0.04 * scale
+
+  return (
+    <group position={[0, planeHeight / 2, 0]}>
+      {/* The image itself — vertical, centered */}
+      <mesh>
+        <planeGeometry args={[planeWidth, planeHeight]} />
+        <meshStandardMaterial map={texture} side={THREE.DoubleSide} roughness={0.8} metalness={0.0} />
+      </mesh>
+      {/* Procedural picture frame — four beveled bars */}
+      {showFrame && (
+        <group position={[0, 0, -frameDepth / 2]}>
+          {/* Top bar */}
+          <mesh position={[0, (planeHeight + frameBorder) / 2, 0]}>
+            <boxGeometry args={[planeWidth + frameBorder * 2, frameBorder, frameDepth]} />
+            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
+          </mesh>
+          {/* Bottom bar */}
+          <mesh position={[0, -(planeHeight + frameBorder) / 2, 0]}>
+            <boxGeometry args={[planeWidth + frameBorder * 2, frameBorder, frameDepth]} />
+            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
+          </mesh>
+          {/* Left bar */}
+          <mesh position={[-(planeWidth + frameBorder) / 2, 0, 0]}>
+            <boxGeometry args={[frameBorder, planeHeight, frameDepth]} />
+            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
+          </mesh>
+          {/* Right bar */}
+          <mesh position={[(planeWidth + frameBorder) / 2, 0, 0]}>
+            <boxGeometry args={[frameBorder, planeHeight, frameDepth]} />
+            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -367,7 +480,7 @@ export function CatalogModelRenderer({ path, scale, objectId, displayName }: { p
             useOasisStore.getState().setInspectedObject(objectId)
           }
         }}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); setShowLabel(true) }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); if (!document.pointerLockElement) setShowLabel(true) }}
         onPointerOut={(e) => { e.stopPropagation(); setHovered(false); setShowLabel(false) }}
       >
         <boxGeometry args={[bounds.size.x * scale, bounds.size.y * scale, bounds.size.z * scale]} />
@@ -385,7 +498,7 @@ export function CatalogModelRenderer({ path, scale, objectId, displayName }: { p
 
       {/* Info label — name + triangle count, consistent with conjured/crafted */}
       {showLabel && (
-        <Html position={[0, bounds.size.y * scale + 0.5, 0]} center>
+        <Html position={[0, bounds.size.y * scale + 0.5, 0]} center style={{ pointerEvents: 'none' }}>
           <div
             className="px-2 py-1 rounded text-xs whitespace-nowrap select-none pointer-events-none"
             style={{
@@ -496,10 +609,10 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     console.log(`[VRM:NPC] ${displayName || path.split('/').pop()} — expressions: ${Object.keys(loadedVrm.expressionManager?.expressionMap || {}).length}, spring: ${loadedVrm.springBoneManager ? 'yes' : 'no'}`)
   }, [gltf, path, displayName])
 
-  // ░▒▓ WALK ANIMATION — Load from library, retarget for VRM skeleton ▓▒░
+  // ░▒▓ ANIMATION SYSTEM — Load from library, retarget for VRM skeleton ▓▒░
   const mixerRef = useRef<THREE.AnimationMixer | null>(null)
-  const walkActionRef = useRef<THREE.AnimationAction | null>(null)
-  const isWalkingRef = useRef(false)
+  const currentActionRef = useRef<THREE.AnimationAction | null>(null)
+  const activeAnimRef = useRef<'none' | 'idle' | 'walk' | 'behavior'>('none')
   const isMoving = useOasisStore(s => objectId ? !!s.behaviors[objectId]?.moveTarget : false)
   const animConfig = useOasisStore(s => objectId ? s.behaviors[objectId]?.animation : undefined)
 
@@ -511,14 +624,18 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     return () => { mixer.stopAllAction(); mixerRef.current = null }
   }, [vrm])
 
-  // Load walk clip + retarget for THIS VRM's actual normalized bone names
+  // Load walk + idle clips, retarget for THIS VRM's actual normalized bone names
   const [walkClip, setWalkClip] = useState<THREE.AnimationClip | null>(null)
+  const [idleClip, setIdleClip] = useState<THREE.AnimationClip | null>(null)
   useEffect(() => {
     if (!vrm) return
     // cacheKey = objectId (per-NPC) so each VRM gets its own retargeted clip
     const key = objectId || 'vrm-npc'
     loadAnimationClip('walk').then(clip => {
       if (clip) setWalkClip(retargetClipForVRM(clip, vrm, key))
+    })
+    loadAnimationClip('idle-fight').then(clip => {
+      if (clip) setIdleClip(retargetClipForVRM(clip, vrm, key + '-idle'))
     })
   }, [vrm, objectId])
 
@@ -536,49 +653,52 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     }
   }, [animConfig?.clipName, vrm, objectId])
 
-  // ░▒▓ Animation state machine — behavior > walk-during-move > idle ▓▒░
+  // ░▒▓ Animation state machine — behavior > walk > idle ▓▒░
+  // Deterministic: compute desired state, skip if already there, otherwise transition.
   useEffect(() => {
     const mixer = mixerRef.current
     if (!mixer) return
 
-    // Priority 1: Explicit behavior animation (dance, combat, etc.)
-    if (behaviorClip) {
-      if (walkActionRef.current) { walkActionRef.current.fadeOut(0.3) }
-      const action = mixer.clipAction(behaviorClip)
-      const loop = animConfig?.loop || 'repeat'
-      action.setLoop(loop === 'once' ? THREE.LoopOnce : loop === 'pingpong' ? THREE.LoopPingPong : THREE.LoopRepeat, Infinity)
-      action.clampWhenFinished = loop === 'once'
-      action.timeScale = animConfig?.speed || 1
-      action.reset().fadeIn(0.3).play()
-      walkActionRef.current = action
-      isWalkingRef.current = true
-      return
+    // Determine what SHOULD play right now
+    let target: 'behavior' | 'walk' | 'idle' | 'none' = 'none'
+    if (behaviorClip) target = 'behavior'
+    else if (isMoving && walkClip) target = 'walk'
+    else if (idleClip) target = 'idle'
+
+    // Already in correct state → no-op
+    if (target === activeAnimRef.current) return
+
+    // Fade out current action
+    if (currentActionRef.current) {
+      currentActionRef.current.fadeOut(0.3)
+      currentActionRef.current = null
     }
 
-    // Priority 2: Walk during RTS movement
-    if (isMoving && walkClip) {
-      if (!isWalkingRef.current) {
-        if (walkActionRef.current) walkActionRef.current.fadeOut(0.2)
-        const action = mixer.clipAction(walkClip)
+    // Resolve clip for target state
+    let clip: THREE.AnimationClip | null = null
+    if (target === 'behavior') clip = behaviorClip
+    else if (target === 'walk') clip = walkClip
+    else if (target === 'idle') clip = idleClip
+
+    if (clip) {
+      const action = mixer.clipAction(clip)
+      if (target === 'behavior') {
+        const loop = animConfig?.loop || 'repeat'
+        action.setLoop(loop === 'once' ? THREE.LoopOnce : loop === 'pingpong' ? THREE.LoopPingPong : THREE.LoopRepeat, Infinity)
+        action.clampWhenFinished = loop === 'once'
+        action.timeScale = animConfig?.speed || 1
+      } else {
         action.setLoop(THREE.LoopRepeat, Infinity)
-        action.reset().fadeIn(0.3).play()
-        walkActionRef.current = action
-        isWalkingRef.current = true
       }
-      return
+      action.reset().fadeIn(0.3).play()
+      currentActionRef.current = action
     }
 
-    // Priority 3: Stop walking — fade out
-    if (!isMoving && isWalkingRef.current && !behaviorClip) {
-      if (walkActionRef.current) {
-        walkActionRef.current.fadeOut(0.3)
-        walkActionRef.current = null
-      }
-      isWalkingRef.current = false
-    }
-  }, [isMoving, walkClip, behaviorClip, animConfig?.loop, animConfig?.speed])
+    activeAnimRef.current = target
+    console.log(`[VRM:NPC] ${displayName || objectId} → anim: ${target}`)
+  }, [isMoving, walkClip, idleClip, behaviorClip, animConfig?.loop, animConfig?.speed, displayName, objectId])
 
-  // Idle + walk animation tick — expressions + spring bones + mixer
+  // Animation tick — expressions + spring bones + mixer (drives idle/walk/behavior)
   useFrame((state, delta) => {
     const v = vrmRef.current
     if (!v) return
@@ -613,9 +733,26 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
       const blinkPhase = t % 4
       expr.setValue('blink', (blinkPhase > 3.7 && blinkPhase < 3.9) ? 1 : 0)
 
-      // Subtle expression — gentle breathing smile
-      const smileAmount = Math.sin(t * 0.3) * 0.15 + 0.1
-      expr.setValue('happy', Math.max(0, smileAmount))
+      // ░▒▓ Joystick expression overrides — if set, they take priority over defaults ▓▒░
+      const exprOverrides = objectId ? useOasisStore.getState().behaviors[objectId]?.expressions : undefined
+      if (exprOverrides && Object.keys(exprOverrides).length > 0) {
+        // Apply all expression overrides from the Joystick panel
+        if (exprOverrides.happy != null) expr.setValue('happy', exprOverrides.happy)
+        if (exprOverrides.angry != null) expr.setValue('angry', exprOverrides.angry)
+        if (exprOverrides.sad != null) expr.setValue('sad', exprOverrides.sad)
+        if (exprOverrides.surprised != null) expr.setValue('surprised', exprOverrides.surprised)
+        if (exprOverrides.relaxed != null) expr.setValue('relaxed', exprOverrides.relaxed)
+        // Visemes (mouth shapes)
+        if (exprOverrides.aa != null) expr.setValue('aa', exprOverrides.aa)
+        if (exprOverrides.ih != null) expr.setValue('ih', exprOverrides.ih)
+        if (exprOverrides.ou != null) expr.setValue('ou', exprOverrides.ou)
+        if (exprOverrides.ee != null) expr.setValue('ee', exprOverrides.ee)
+        if (exprOverrides.oh != null) expr.setValue('oh', exprOverrides.oh)
+      } else {
+        // Default: subtle breathing smile
+        const smileAmount = Math.sin(t * 0.3) * 0.15 + 0.1
+        expr.setValue('happy', Math.max(0, smileAmount))
+      }
     }
 
     // LookAt — eyes wander (offset per NPC too)
@@ -689,7 +826,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
             useOasisStore.getState().setInspectedObject(objectId)
           }
         }}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); setShowLabel(true) }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); if (!document.pointerLockElement) setShowLabel(true) }}
         onPointerOut={(e) => { e.stopPropagation(); setHovered(false); setShowLabel(false) }}
       >
         <boxGeometry args={[bounds.size.x * scale, bounds.size.y * scale, bounds.size.z * scale]} />
@@ -707,7 +844,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
 
       {/* Info label */}
       {showLabel && (
-        <Html position={[0, bounds.size.y * scale + 0.5, 0]} center>
+        <Html position={[0, bounds.size.y * scale + 0.5, 0]} center style={{ pointerEvents: 'none' }}>
           <div
             className="px-2 py-1 rounded text-xs whitespace-nowrap select-none pointer-events-none"
             style={{ background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(168,85,247,0.3)', color: '#A855F7' }}
@@ -726,7 +863,7 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// KEYBOARD SHORTCUTS for transform mode (W/E/R like Blender)
+// KEYBOARD SHORTCUTS for transform mode (R/T/Y — avoids WASD movement conflict)
 // One instance per scene — handles global key bindings
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -739,10 +876,15 @@ export function TransformKeyHandler() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return
+      // Skip when typing in any form element (inputs, textareas, selects, contenteditable)
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if ((e.target as HTMLElement).isContentEditable) return
+
+      const key = e.key.toLowerCase()
 
       // ░▒▓ Ctrl+Z / Ctrl+Shift+Z — Undo/Redo ▓▒░
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault()
         if (e.shiftKey) {
           useOasisStore.getState().redo()
@@ -752,19 +894,59 @@ export function TransformKeyHandler() {
         return
       }
       // Ctrl+Y also redo (Windows convention)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      if ((e.ctrlKey || e.metaKey) && key === 'y') {
         e.preventDefault()
         useOasisStore.getState().redo()
         return
       }
 
-      switch (e.key) {
+      // ░▒▓ Ctrl+C — copy selected object to clipboard + spawn 3D toast ▓▒░
+      if ((e.ctrlKey || e.metaKey) && key === 'c') {
+        const state = useOasisStore.getState()
+        const id = state.selectedObjectId
+        if (!id) return  // let browser handle native copy when nothing selected
+        // Resolve position for VFX toast
+        const objPos = state.transforms[id]?.position || [0, 0, 0]
+        const catalog = state.placedCatalogAssets.find(a => a.id === id)
+        if (catalog) {
+          _clipboard = { type: 'catalog', catalogId: catalog.catalogId, name: catalog.name, path: catalog.glbPath, defaultScale: catalog.scale, imageUrl: catalog.imageUrl }
+          spawnCopyToast(catalog.position || objPos as [number, number, number])
+          e.preventDefault()
+          return
+        }
+        const crafted = state.craftedScenes.find(s => s.id === id)
+        if (crafted) {
+          _clipboard = { type: 'crafted', name: crafted.name, sceneId: crafted.id }
+          spawnCopyToast(crafted.position || objPos as [number, number, number])
+          e.preventDefault()
+          return
+        }
+        const conjuredAsset = state.conjuredAssets.find(a => a.id === id && a.glbPath)
+        if (conjuredAsset) {
+          _clipboard = { type: 'catalog', catalogId: conjuredAsset.id, name: conjuredAsset.displayName || conjuredAsset.prompt, path: conjuredAsset.glbPath!, defaultScale: 1 }
+          spawnCopyToast(conjuredAsset.position || objPos as [number, number, number])
+          e.preventDefault()
+          return
+        }
+        return  // lights or unknown — let browser handle
+      }
+      // ░▒▓ Ctrl+V — paste clipboard → enter placement mode ▓▒░
+      if ((e.ctrlKey || e.metaKey) && key === 'v') {
+        if (!_clipboard) return
+        e.preventDefault()
+        useOasisStore.getState().enterPlacementMode({ ..._clipboard })
+        return
+      }
+
+      // Skip all other shortcuts if a modifier is held (avoid hijacking browser combos)
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      switch (key) {
         case 'r': setTransformMode('translate'); break
         case 't': setTransformMode('rotate'); break
         case 'y': setTransformMode('scale'); break
-        // ░▒▓ Delete / Backspace — remove selected object from world ▓▒░
-        case 'Delete':
-        case 'Backspace': {
+        // ░▒▓ Delete — remove selected object from world ▓▒░
+        case 'delete': {
           const state = useOasisStore.getState()
           const id = state.selectedObjectId
           if (!id) break
@@ -1048,6 +1230,7 @@ function GhostPreview({ position, pending }: {
 }) {
   const color = pending.type === 'catalog' ? '#FFD700'
     : pending.type === 'library' || pending.type === 'crafted' ? '#3B82F6'
+    : pending.type === 'image' ? '#EC4899'
     : '#FF8C00'
 
   return (
@@ -1085,13 +1268,13 @@ function GhostPreview({ position, pending }: {
 function PlacementOverlay() {
   const placementPending = useOasisStore(s => s.placementPending)
   const placeCatalogAssetAt = useOasisStore(s => s.placeCatalogAssetAt)
+  const placeImageAt = useOasisStore(s => s.placeImageAt)
   const placeLibrarySceneAt = useOasisStore(s => s.placeLibrarySceneAt)
   const cancelPlacement = useOasisStore(s => s.cancelPlacement)
   const [hoverPos, setHoverPos] = useState<[number, number, number] | null>(null)
 
   const handleClick = useCallback((e: any) => {
     e.stopPropagation()
-    if (document.pointerLockElement) return  // FPS mode — don't intercept
     if (!placementPending) return
     const point = e.point as THREE.Vector3
     const pos: [number, number, number] = [point.x, 0, point.z]
@@ -1102,6 +1285,8 @@ function PlacementOverlay() {
       // ░▒▓ Conjured multi-placement — uses catalog placement system with conjured GLB path ▓▒░
       const conjId = `conjured-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       placeCatalogAssetAt(conjId, placementPending.name, placementPending.path, placementPending.defaultScale || 1, pos)
+    } else if (placementPending.type === 'image' && placementPending.imageUrl) {
+      placeImageAt(placementPending.name, placementPending.imageUrl, pos, placementPending.imageFrame)
     } else if (placementPending.type === 'library' && placementPending.sceneId) {
       placeLibrarySceneAt(placementPending.sceneId, pos)
     } else if (placementPending.type === 'crafted' && placementPending.sceneId) {
@@ -1126,7 +1311,7 @@ function PlacementOverlay() {
     } else {
       cancelPlacement()
     }
-  }, [placementPending, placeCatalogAssetAt, placeLibrarySceneAt, cancelPlacement])
+  }, [placementPending, placeCatalogAssetAt, placeImageAt, placeLibrarySceneAt, cancelPlacement])
 
   const handlePointerMove = useCallback((e: any) => {
     // ░▒▓ FPS CAMERA FIX — skip R3F pointer events during pointer lock ▓▒░
@@ -1186,10 +1371,16 @@ function ConjurePreviewEffect() {
   const clearConjurePreview = useOasisStore(s => s.clearConjurePreview)
   const [progress, setProgress] = useState(0)
   const startRef = useRef(0)
+  // Resolve 'random' ONCE per preview start — same issue as CraftingInProgressVFX.
+  // Inline Math.random() re-rolls on every RAF-driven re-render → cycling glitch.
+  const resolvedPreviewRef = useRef<Exclude<ConjureVfxType, 'random'>>('textswirl')
 
   useEffect(() => {
     if (!conjurePreview) { setProgress(0); return }
     startRef.current = performance.now()
+    resolvedPreviewRef.current = conjurePreview.type === 'random'
+      ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
+      : conjurePreview.type
     const PREVIEW_DURATION = 6000 // 6 seconds to show full cycle
     let rafId: number
 
@@ -1209,17 +1400,12 @@ function ConjurePreviewEffect() {
 
   if (!conjurePreview) return null
 
-  // Resolve 'random' to a concrete type for the preview
-  const previewVfx = conjurePreview.type === 'random'
-    ? CONJURE_VFX_LIST[Math.floor(Math.random() * CONJURE_VFX_LIST.length)]
-    : conjurePreview.type
-
   return (
     <ConjureVFX
       position={[0, 0, 0]}
       prompt="preview spell demonstration"
       progress={progress}
-      vfxType={previewVfx}
+      vfxType={resolvedPreviewRef.current}
     />
   )
 }
@@ -1304,7 +1490,7 @@ function LightHelperOrb({ light }: { light: import('../../lib/conjure/types').Wo
   return (
     <group
       onPointerOver={(e) => { e.stopPropagation(); setHovered(true) }}
-      onPointerOut={() => setHovered(false)}
+      onPointerOut={(e) => { e.stopPropagation(); setHovered(false) }}
     >
       {/* The actual Three.js light */}
       {light.type === 'point' && (
@@ -1471,6 +1657,8 @@ export function WorldObjectsRenderer() {
     <group>
       {/* W/E/R keyboard shortcuts for transform modes + ESC for placement cancel */}
       <TransformKeyHandler />
+      {/* ░▒▓ "COPIED!" floating 3D toasts ▓▒░ */}
+      <CopyToastRenderer />
 
       {/* ░▒▓ Click-to-place overlay — only active during placement mode ▓▒░ */}
       <PlacementOverlay />
@@ -1570,11 +1758,13 @@ export function WorldObjectsRenderer() {
             initialRotation={t?.rotation}
             initialScale={t?.scale}
           >
-            <CatalogModelErrorBoundary path={ca.glbPath} name={ca.name}>
+            <CatalogModelErrorBoundary path={ca.imageUrl || ca.glbPath} name={ca.name}>
               <Suspense fallback={<PlaceholderBox />}>
-                {ca.glbPath.endsWith('.vrm')
-                  ? <VRMCatalogRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
-                  : <CatalogModelRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
+                {ca.imageUrl
+                  ? <ImagePlaneRenderer imageUrl={ca.imageUrl} scale={ca.scale} showFrame={ca.imageFrame} />
+                  : ca.glbPath.endsWith('.vrm')
+                    ? <VRMCatalogRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
+                    : <CatalogModelRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
                 }
               </Suspense>
             </CatalogModelErrorBoundary>

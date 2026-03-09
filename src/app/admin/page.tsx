@@ -21,6 +21,7 @@ const PRICE_LABELS: Record<string, { label: string; group: string }> = {
   post_animate: { label: 'Post-process: Animate', group: 'Post-Processing' },
   craft: { label: 'LLM Craft', group: 'LLM' },
   terrain: { label: 'LLM Terrain', group: 'LLM' },
+  imagine: { label: 'Text-to-Image (Imagine)', group: 'LLM' },
   free_credits: { label: 'Free credits on signup', group: 'Onboarding' },
 }
 
@@ -28,6 +29,7 @@ const XP_LABELS: Record<string, { label: string; group: string }> = {
   PLACE_CATALOG_OBJECT: { label: 'Place catalog object', group: 'Building' },
   CONJURE_ASSET: { label: 'Conjure asset', group: 'Building' },
   CRAFT_SCENE: { label: 'Craft scene (LLM)', group: 'Building' },
+  GENERATE_IMAGE: { label: 'Generate image (Imagine)', group: 'Building' },
   PAINT_GROUND_BATCH: { label: 'Paint ground (~10 tiles)', group: 'Building' },
   ADD_LIGHT: { label: 'Add light', group: 'Building' },
   FIRST_OBJECT_IN_WORLD: { label: 'First object in world', group: 'Milestones' },

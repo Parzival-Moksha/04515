@@ -11,6 +11,7 @@
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 import type { CraftedScene, CatalogPlacement, ObjectBehavior, WorldLight } from '../conjure/types'
+import type { GroundPreset } from './ground-textures'
 import type { TerrainParams } from './terrain-generator'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -41,6 +42,8 @@ export interface WorldState {
   lights?: WorldLight[]
   /** Sky background preset ID — per-world (not global) */
   skyBackgroundId?: string
+  /** User-generated ground presets (custom textures from Imagine) */
+  customGroundPresets?: GroundPreset[]
   savedAt: string
 }
 

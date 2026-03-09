@@ -906,7 +906,10 @@ export function CraftedPreviewPanel({ scene, onBack, onPlace, accentColor = '#3B
       {scene.prompt && (
         <div className="px-2 py-1.5 border-t border-white/5" style={{ background: 'rgba(20, 20, 20, 0.4)' }}>
           <div className="text-[9px] text-gray-500 uppercase tracking-widest font-mono mb-0.5">Prompt</div>
-          <div className="text-[10px] text-gray-400 font-mono leading-relaxed">{scene.prompt}</div>
+          <div className="text-[10px] text-gray-400 font-mono leading-relaxed">
+            {/* Strip iterative context prefix from legacy crafted scenes */}
+            {scene.prompt.includes('User wants: ') ? scene.prompt.split('User wants: ').pop() : scene.prompt}
+          </div>
         </div>
       )}
 

@@ -17,6 +17,8 @@ out/
 
 # Runtime-generated GLBs (user conjurations — can be 1GB+)
 public/conjured/*
+# Runtime-generated images (user text-to-image creations)
+public/generated-images/
 # Showcase assets — whitelisted for the repo
 !public/conjured/conj_mlvfxxqw9lsh.glb
 !public/conjured/conj_mlvfxxqw9lsh_thumb.jpg

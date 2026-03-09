@@ -19,6 +19,16 @@ const nextConfig = {
     NEXT_PUBLIC_BASE_PATH: '',
   },
 
+  // Disable HMR in dev mode (use DISABLE_HMR=1 pnpm dev)
+  ...(process.env.DISABLE_HMR === '1' && {
+    webpack: (config, { dev }) => {
+      if (dev) {
+        config.watchOptions = { ignored: /.*/ }
+      }
+      return config
+    },
+  }),
+
   // ─═̷─═̷─🔒─═̷─═̷─ Security headers ─═̷─═̷─🔒─═̷─═̷─
   async headers() {
     return [{

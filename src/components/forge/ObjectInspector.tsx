@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom'
 import { useOasisStore } from '../../store/oasisStore'
 import { SettingsContext } from '../scene-lib/contexts'
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_STEP } from '../../lib/conjure/types'
-import type { MovementPreset, ObjectBehavior, AnimationConfig, ModelStats } from '../../lib/conjure/types'
+import type { MovementPreset, ObjectBehavior, AnimationConfig, ModelStats, VRMExpressionConfig } from '../../lib/conjure/types'
 import { formatNumber, formatBytes } from './ModelPreview'
 import { ANIMATION_LIBRARY, ANIM_CATEGORIES, LIB_PREFIX, loadAnimationClip, type AnimCategory } from '../../lib/forge/animation-library'
 
@@ -144,6 +144,90 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
     >
       {children}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VRM EXPRESSION SECTION — Facial controls for VRM avatars
+// ░▒▓ Emotions + visemes (mouth shapes) — the face is the window to the soul ▓▒░
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const VRM_EMOTIONS: { key: keyof VRMExpressionConfig; label: string; icon: string }[] = [
+  { key: 'happy', label: 'Happy', icon: ':)' },
+  { key: 'angry', label: 'Angry', icon: '>:(' },
+  { key: 'sad', label: 'Sad', icon: ':(' },
+  { key: 'surprised', label: 'Surprised', icon: ':O' },
+  { key: 'relaxed', label: 'Relaxed', icon: '-_-' },
+]
+
+const VRM_VISEMES: { key: keyof VRMExpressionConfig; label: string }[] = [
+  { key: 'aa', label: 'AA (ah)' },
+  { key: 'ih', label: 'IH (ee)' },
+  { key: 'ou', label: 'OU (oo)' },
+  { key: 'ee', label: 'EE (eh)' },
+  { key: 'oh', label: 'OH (oh)' },
+]
+
+function VRMExpressionSection({ expressions, onChange }: {
+  expressions?: VRMExpressionConfig
+  onChange: (expressions: VRMExpressionConfig) => void
+}) {
+  const current = expressions || {}
+  const update = (key: keyof VRMExpressionConfig, value: number) => {
+    onChange({ ...current, [key]: value > 0.01 ? value : undefined })
+  }
+  const resetAll = () => onChange({})
+  const hasAny = Object.values(current).some(v => v && v > 0)
+
+  return (
+    <>
+      <SectionHeader>&#128522; VRM Expressions</SectionHeader>
+      <div className="rounded-lg border border-white/5 p-2 space-y-2" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
+        {/* Emotions */}
+        <div className="text-[9px] text-gray-500 font-mono">Emotions</div>
+        {VRM_EMOTIONS.map(({ key, label, icon }) => (
+          <div key={key} className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 font-mono w-20 shrink-0">{icon} {label}</span>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={current[key] || 0}
+              onChange={(e) => update(key, parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-fuchsia-500 cursor-pointer"
+            />
+            <span className="text-[9px] text-gray-500 font-mono w-8 text-right">
+              {((current[key] || 0) * 100).toFixed(0)}%
+            </span>
+          </div>
+        ))}
+
+        {/* Visemes */}
+        <div className="text-[9px] text-gray-500 font-mono mt-2">Mouth shapes</div>
+        {VRM_VISEMES.map(({ key, label }) => (
+          <div key={key} className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 font-mono w-20 shrink-0">{label}</span>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={current[key] || 0}
+              onChange={(e) => update(key, parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-fuchsia-500 cursor-pointer"
+            />
+            <span className="text-[9px] text-gray-500 font-mono w-8 text-right">
+              {((current[key] || 0) * 100).toFixed(0)}%
+            </span>
+          </div>
+        ))}
+
+        {/* Reset */}
+        {hasAny && (
+          <button
+            onClick={resetAll}
+            className="w-full text-[10px] py-1 rounded border border-gray-700/30 text-gray-400 hover:text-gray-300 font-mono transition-colors mt-1"
+          >
+            Reset all expressions
+          </button>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -372,6 +456,19 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
     })
   }, [inspectedObjectId, setObjectTransform])
 
+  /** ░▒▓ Precise transform editing — update a single axis value ▓▒░ */
+  const updateTransformAxis = useCallback((property: 'position' | 'rotation' | 'scale', axis: 0 | 1 | 2, value: number) => {
+    if (!inspectedObjectId) return
+    const current = transforms[inspectedObjectId] || { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
+    const pos = [...(current.position || [0, 0, 0])] as [number, number, number]
+    const rot = [...(current.rotation || [0, 0, 0])] as [number, number, number]
+    const scl = typeof current.scale === 'number' ? [current.scale, current.scale, current.scale] as [number, number, number] : [...(current.scale || [1, 1, 1])] as [number, number, number]
+    if (property === 'position') pos[axis] = value
+    else if (property === 'rotation') rot[axis] = value
+    else scl[axis] = value
+    setObjectTransform(inspectedObjectId, { position: pos, rotation: rot, scale: scl })
+  }, [inspectedObjectId, transforms, setObjectTransform])
+
   /** ░▒▓ Delete object from world ▓▒░ */
   const handleDelete = useCallback(() => {
     if (!resolved || !inspectedObjectId) return
@@ -490,6 +587,13 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
           {badge.label}
         </span>
 
+        {/* LLM model badge — crafted scenes only */}
+        {resolved.type === 'crafted' && (resolved.data as any)?.model && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-mono shrink-0 bg-blue-500/15 text-blue-400" title="Crafted by this LLM">
+            {(resolved.data as any).model.split('/').pop()}
+          </span>
+        )}
+
         {/* File size badge */}
         {stats?.fileSize != null && (
           <span className="text-[9px] px-1.5 py-0.5 rounded-full font-mono shrink-0 bg-fuchsia-500/15 text-fuchsia-400">
@@ -524,31 +628,53 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
                     : 'text-gray-400 border border-gray-700/30 hover:text-gray-200 hover:border-gray-500/50'
                 }`}
               >
-                {m === 'translate' ? 'W Move' : m === 'rotate' ? 'E Rot' : 'R Scale'}
+                {m === 'translate' ? 'R Move' : m === 'rotate' ? 'T Rot' : 'Y Scale'}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-4 gap-x-1 text-[10px] font-mono">
+          <div className="grid grid-cols-4 gap-x-1 text-[10px] font-mono items-center">
             <span className="text-gray-400"></span>
             <span className="text-red-400/60 text-center">X</span>
             <span className="text-green-400/60 text-center">Y</span>
             <span className="text-blue-400/60 text-center">Z</span>
 
             <span className="text-gray-400">pos</span>
-            <span className="text-gray-300 text-center">{fmt(pos[0])}</span>
-            <span className="text-gray-300 text-center">{fmt(pos[1])}</span>
-            <span className="text-gray-300 text-center">{fmt(pos[2])}</span>
+            {([0, 1, 2] as const).map(axis => (
+              <input
+                key={`pos-${axis}`}
+                type="number"
+                step={0.1}
+                value={fmt(pos[axis])}
+                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) updateTransformAxis('position', axis, v) }}
+                className="bg-transparent border border-gray-700/40 rounded px-1 py-0.5 text-gray-300 text-center w-full focus:border-fuchsia-500/60 focus:outline-none hover:border-gray-500/60 transition-colors"
+              />
+            ))}
 
             <span className="text-gray-400">rot</span>
-            <span className="text-gray-300 text-center">{rad2deg(rot[0])}</span>
-            <span className="text-gray-300 text-center">{rad2deg(rot[1])}</span>
-            <span className="text-gray-300 text-center">{rad2deg(rot[2])}</span>
+            {([0, 1, 2] as const).map(axis => (
+              <input
+                key={`rot-${axis}`}
+                type="number"
+                step={1}
+                value={rad2deg(rot[axis])}
+                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) updateTransformAxis('rotation', axis, v * Math.PI / 180) }}
+                className="bg-transparent border border-gray-700/40 rounded px-1 py-0.5 text-gray-300 text-center w-full focus:border-fuchsia-500/60 focus:outline-none hover:border-gray-500/60 transition-colors"
+              />
+            ))}
 
             <span className="text-gray-400">scl</span>
-            <span className="text-gray-300 text-center">{fmt(sclArr[0])}</span>
-            <span className="text-gray-300 text-center">{fmt(sclArr[1])}</span>
-            <span className="text-gray-300 text-center">{fmt(sclArr[2])}</span>
+            {([0, 1, 2] as const).map(axis => (
+              <input
+                key={`scl-${axis}`}
+                type="number"
+                step={0.1}
+                min={0.01}
+                value={fmt(sclArr[axis])}
+                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) updateTransformAxis('scale', axis, v) }}
+                className="bg-transparent border border-gray-700/40 rounded px-1 py-0.5 text-gray-300 text-center w-full focus:border-fuchsia-500/60 focus:outline-none hover:border-gray-500/60 transition-colors"
+              />
+            ))}
           </div>
           <button
             onClick={resetTransform}
@@ -998,6 +1124,16 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
               onChange={(speed) => updateAnimation({ ...behavior.animation!, speed })}
             />
           </div>
+        )}
+
+        {/* ░▒▓ VRM EXPRESSIONS — Facial controls for VRM avatars ▓▒░ */}
+        {resolved?.type === 'catalog' && (resolved.data as any).glbPath?.endsWith('.vrm') && (
+          <VRMExpressionSection
+            expressions={behavior.expressions}
+            onChange={(expressions) => {
+              if (inspectedObjectId) setObjectBehavior(inspectedObjectId, { expressions })
+            }}
+          />
         )}
 
         {/* ░▒▓ ACTIONS ▓▒░ */}

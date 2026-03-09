@@ -14,6 +14,8 @@ export interface GroundPreset {
   assetName: string
   /** Texture tiling: how many repeats across the ground */
   tileRepeat: number
+  /** Direct URL for user-generated textures (bypasses assetName→CDN path) */
+  customTextureUrl?: string
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

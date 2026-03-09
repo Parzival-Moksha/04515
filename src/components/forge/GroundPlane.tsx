@@ -27,8 +27,8 @@ import { DragContext } from '../scene-lib/contexts'
 
 const GROUND_SIZE = 100
 const TILE_SIZE = 1
-// Max tiles per preset group — oversized buffer so we never remount
-const MAX_TILES_PER_GROUP = 2048
+// Max tiles per preset group — covers full 100×100 world (10,000 tiles)
+const MAX_TILES_PER_GROUP = 10000
 
 // ░▒▓ PLACEHOLDER TEXTURE — 1x1 grey pixel, lazy-initialized (SSR-safe) ▓▒░
 // Forces GPU shader to compile WITH texture sampler from the start.
@@ -147,7 +147,12 @@ function BaseGround({ preset }: { preset: GroundPreset }) {
 function TileGroupRenderer({ preset, tiles }: { preset: GroundPreset; tiles: [number, number][] }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const matRef = useRef<THREE.MeshStandardMaterial>(null)
-  const urls = useMemo(() => getTextureUrls(preset.assetName), [preset.assetName])
+  // Custom textures bypass the Poly Haven path builder
+  const urls = useMemo(() =>
+    preset.customTextureUrl
+      ? { diffuse: preset.customTextureUrl }
+      : getTextureUrls(preset.assetName),
+    [preset.assetName, preset.customTextureUrl])
   const [diffuse, setDiffuse] = useState<THREE.Texture | null>(null)
 
   // Load diffuse texture ONCE — shared reference, no clone needed
@@ -308,11 +313,16 @@ function PaintOverlay() {
     const point = e.point as THREE.Vector3
     // Right-click = erase (single tile, own undo command)
     if (e.button === 2) {
+      setIsDragging(true) // Block orbit pan during erase — prevents camera lurch
       beginUndoBatch('Erase tile', '🧽')
       eraseGroundTile(point.x, point.z)
       commitUndoBatch()
       return
     }
+    // ░▒▓ GUARD: only left-click (button 0) paints. Middle-click, extra buttons,
+    // or any R3F edge-case event with unexpected button value → ignore silently.
+    // Without this, non-left clicks fall through to paint at wild raycast coords. ▓▒░
+    if (e.button !== 0) return
     // Left-click = paint — freeze orbit so drag paints, not rotates
     // ░▒▓ Begin undo batch — entire paint stroke = one undo command ▓▒░
     beginUndoBatch('Paint tiles', '🎨')
@@ -375,9 +385,10 @@ interface GroundPlaneProps {
   preset: GroundPreset
   groundTiles: Record<string, string>
   paintMode: boolean
+  customGroundPresets?: GroundPreset[]
 }
 
-export function GroundPlane({ preset, groundTiles, paintMode }: GroundPlaneProps) {
+export function GroundPlane({ preset, groundTiles, paintMode, customGroundPresets = [] }: GroundPlaneProps) {
   const showBase = preset.id !== 'none' && !!preset.assetName
 
   // Group tiles by preset ID for instanced rendering
@@ -402,8 +413,10 @@ export function GroundPlane({ preset, groundTiles, paintMode }: GroundPlaneProps
       {/* ░▒▓ Painted tiles — one stable InstancedMesh per preset ▓▒░ */}
       {/* Key = presetId only (stable). Tile count changes update buffer, not remount. */}
       {Object.entries(tileGroups).map(([presetId, tiles]) => {
+        // Search both built-in and custom presets
         const tilePreset = GROUND_PRESETS.find(p => p.id === presetId)
-        if (!tilePreset || !tilePreset.assetName) return null
+          || customGroundPresets.find(p => p.id === presetId)
+        if (!tilePreset || (!tilePreset.assetName && !tilePreset.customTextureUrl)) return null
         return (
           <TileGroupRenderer
             key={presetId}

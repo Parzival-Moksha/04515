@@ -220,6 +220,7 @@ export interface CraftedScene {
   position: [number, number, number]
   createdAt: string
   thumbnailUrl?: string           // /crafted-thumbs/{id}.jpg — auto-generated on creation
+  model?: string                  // LLM model that crafted this (e.g. 'anthropic/claude-sonnet')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -234,6 +235,10 @@ export interface CatalogPlacement {
   position: [number, number, number]
   rotation?: [number, number, number]     // Euler angles in radians
   scale: number
+  /** When set, renders as a textured plane (generated image) instead of loading GLB */
+  imageUrl?: string
+  /** Show procedural picture frame around image plane */
+  imageFrame?: boolean
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -320,11 +325,28 @@ export interface AnimationConfig {
   speed: number       // 0.25 - 2.0x
 }
 
+/** VRM facial expression overrides — values 0-1 for each expression */
+export interface VRMExpressionConfig {
+  happy?: number
+  angry?: number
+  sad?: number
+  surprised?: number
+  relaxed?: number
+  // Visemes (mouth shapes for speech/expression)
+  aa?: number  // "ah"
+  ih?: number  // "ee"
+  ou?: number  // "oo"
+  ee?: number  // "eh"
+  oh?: number  // "oh"
+}
+
 export interface ObjectBehavior {
   label?: string      // custom name override
   movement: MovementPreset
   animation?: AnimationConfig
   visible: boolean
+  /** VRM facial expression overrides — set from Joystick panel */
+  expressions?: VRMExpressionConfig
   /** RTS-style move-to target. Set by right-clicking ground while object is selected. */
   moveTarget?: [number, number, number]
   /** Movement speed for moveTarget (units/sec). Default 3. */
@@ -415,6 +437,18 @@ export type AnimationCategory =
 export const ANIMATION_CATEGORIES: AnimationCategory[] = [
   'DailyActions', 'Fighting', 'Dancing', 'Sports', 'Acrobatics', 'Emotes', 'Others',
 ]
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GENERATED IMAGES — Text-to-image via Gemini, per-user
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface GeneratedImage {
+  id: string
+  prompt: string
+  url: string                    // full-res: /generated-images/{id}.png
+  tileUrl: string                // tile-res: /generated-images/{id}_tile.jpg (256×256)
+  createdAt: string
+}
 
 export interface ConjureResponse {
   id: string

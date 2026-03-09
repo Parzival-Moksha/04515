@@ -17,6 +17,7 @@ export const DEFAULT_XP_AWARDS = {
   PLACE_CATALOG_OBJECT: 5,
   CONJURE_ASSET: 25,
   CRAFT_SCENE: 30,
+  GENERATE_IMAGE: 15,
   PAINT_GROUND_BATCH: 10,    // per ~10 tiles painted
   ADD_LIGHT: 5,
 

@@ -234,7 +234,7 @@ export function CraftedSceneRenderer({ scene, onDelete }: CraftedSceneRendererPr
       onPointerOver={(e) => {
         e.stopPropagation()
         if (hoverTimeout.current) { clearTimeout(hoverTimeout.current); hoverTimeout.current = null }
-        setHovered(true); setShowLabel(true)
+        setHovered(true); if (!document.pointerLockElement) setShowLabel(true)
       }}
       onPointerOut={(e) => {
         e.stopPropagation()

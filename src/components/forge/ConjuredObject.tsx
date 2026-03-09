@@ -77,7 +77,7 @@ class ConjuredObjectErrorBoundary extends React.Component<
             <boxGeometry args={[0.4, 0.4, 0.4]} />
             <meshBasicMaterial color="#ff3333" wireframe transparent opacity={0.6} />
           </mesh>
-          <Html position={[0, 0.6, 0]} center>
+          <Html position={[0, 0.6, 0]} center style={{ pointerEvents: 'none' }}>
             <div className="text-[9px] text-red-400 font-mono bg-black/80 px-1.5 py-0.5 rounded whitespace-nowrap">
               {this.props.prompt.slice(0, 20)}... (broken)
             </div>
@@ -470,7 +470,7 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
         ref={proxyRef}
         position={[bounds.center.x, bounds.center.y, bounds.center.z]}
         onClick={handleProxyClick}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); setShowLabel(true) }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); if (!document.pointerLockElement) setShowLabel(true) }}
         onPointerOut={(e) => { e.stopPropagation(); setHovered(false); setShowLabel(false) }}
       >
         <boxGeometry args={[bounds.size.x, bounds.size.y, bounds.size.z]} />
@@ -490,7 +490,7 @@ export function ConjuredObject({ asset }: ConjuredObjectProps) {
 
       {/* Info label */}
       {showLabel && (
-        <Html position={[0, 2, 0]} center>
+        <Html position={[0, 2, 0]} center style={{ pointerEvents: 'none' }}>
           <div
             className="px-2 py-1 rounded text-xs whitespace-nowrap select-none pointer-events-none"
             style={{

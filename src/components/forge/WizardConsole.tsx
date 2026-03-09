@@ -11,7 +11,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useConjure } from '../../hooks/useConjure'
 import { useOasisStore } from '../../store/oasisStore'
-import { PROVIDERS, REMESH_PRESETS, LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_STEP, type ProviderName, type ConjuredAsset, type ConjureStatus, type CraftedScene, type CatalogPlacement, type RemeshQuality, type WorldLightType } from '../../lib/conjure/types'
+import { PROVIDERS, REMESH_PRESETS, LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_STEP, type ProviderName, type ConjuredAsset, type ConjureStatus, type CraftedScene, type CatalogPlacement, type RemeshQuality, type WorldLightType, type GeneratedImage } from '../../lib/conjure/types'
 import type { PlacementVfxType } from '../../store/oasisStore'
 import { useContext } from 'react'
 import { GROUND_PRESETS, getTextureUrls } from '../../lib/forge/ground-textures'
@@ -396,6 +396,253 @@ function GalleryItem({ asset, onDelete, isInWorld, onPlace, onRemove, onTexture,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// IMAGINE TAB — Text-to-image via Gemini, ground textures, gallery
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const IMAGINE_MODELS = [
+  { key: 'gemini-flash', label: 'Gemini Flash', desc: 'Google — fast multimodal' },
+  { key: 'riverflow', label: 'Riverflow v2', desc: 'Sourceful — fast diffusion' },
+  { key: 'flux-klein', label: 'FLUX Klein', desc: 'Black Forest Labs — 4B param' },
+  { key: 'seedream', label: 'Seedream 4.5', desc: 'ByteDance — high quality' },
+] as const
+
+interface InFlightImage {
+  id: string
+  prompt: string
+  model: string
+  startedAt: number
+  error?: string
+}
+
+function ImagineTab() {
+  const [prompt, setPrompt] = useState('')
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-flash')
+  const [inFlight, setInFlight] = useState<InFlightImage[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const generatedImages = useOasisStore(s => s.generatedImages)
+  const addGeneratedImage = useOasisStore(s => s.addGeneratedImage)
+  const removeGeneratedImage = useOasisStore(s => s.removeGeneratedImage)
+  const addCustomGroundPreset = useOasisStore(s => s.addCustomGroundPreset)
+  const customGroundPresets = useOasisStore(s => s.customGroundPresets)
+  const enterPaintMode = useOasisStore(s => s.enterPaintMode)
+  const enterPlacementMode = useOasisStore(s => s.enterPlacementMode)
+
+  const handleGenerate = useCallback(async () => {
+    if (!prompt.trim()) return
+    const flightId = `flight_${Date.now()}`
+    const capturedPrompt = prompt.trim()
+    const capturedModel = selectedModel
+    setInFlight(prev => [...prev, { id: flightId, prompt: capturedPrompt, model: capturedModel, startedAt: Date.now() }])
+    setPrompt('')
+    setError(null)
+    try {
+      const res = await fetch(`${OASIS_BASE}/api/imagine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: capturedPrompt, model: capturedModel }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Request failed' }))
+        setInFlight(prev => prev.map(f => f.id === flightId ? { ...f, error: data.error || `Error ${res.status}` } : f))
+        return
+      }
+      const data = await res.json()
+      addGeneratedImage({
+        id: data.id,
+        prompt: data.prompt,
+        url: data.url,
+        tileUrl: data.tileUrl,
+        createdAt: data.createdAt,
+      })
+      awardXp('GENERATE_IMAGE')
+    } catch (e) {
+      setInFlight(prev => prev.map(f => f.id === flightId ? { ...f, error: (e as Error).message } : f))
+      return
+    }
+    // Remove from in-flight on success
+    setInFlight(prev => prev.filter(f => f.id !== flightId))
+  }, [prompt, selectedModel, addGeneratedImage])
+
+  const handleUseAsTile = useCallback((image: { id: string; prompt: string; tileUrl: string; url: string }) => {
+    const presetId = `custom_${image.id}`
+    // Check if already registered
+    if (!customGroundPresets.some(p => p.id === presetId)) {
+      addCustomGroundPreset({
+        id: presetId,
+        name: image.prompt.slice(0, 20),
+        icon: '🎨',
+        color: '#888888',
+        assetName: '',
+        tileRepeat: 1,
+        customTextureUrl: image.tileUrl,
+      })
+    }
+    enterPaintMode(presetId)
+  }, [customGroundPresets, addCustomGroundPreset, enterPaintMode])
+
+  return (
+    <>
+      <div className="space-y-3">
+        {/* Prompt input */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[10px] text-pink-400/60 uppercase tracking-widest font-mono">
+              Text to Image
+            </div>
+            <select
+              value={selectedModel}
+              onChange={e => setSelectedModel(e.target.value)}
+              className="text-[10px] bg-black/60 border border-pink-500/20 rounded px-1.5 py-0.5 text-pink-300 font-mono focus:outline-none focus:border-pink-500/50 cursor-pointer"
+            >
+              {IMAGINE_MODELS.map(m => (
+                <option key={m.key} value={m.key}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleGenerate() }}
+              placeholder="Describe what you see..."
+              className="flex-1 bg-black/60 border border-pink-500/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 font-mono"
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={!prompt.trim()}
+              className="px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-30"
+              style={{
+                background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.3), rgba(168, 85, 247, 0.3))',
+                color: '#F9A8D4',
+                border: '1px solid rgba(236, 72, 153, 0.3)',
+              }}
+            >
+              {inFlight.length > 0 ? `Imagine (${inFlight.length})` : 'Imagine'}
+            </button>
+          </div>
+          {error && (
+            <div className="mt-1 text-[10px] text-red-400 font-mono">{error}</div>
+          )}
+        </div>
+
+        {/* In-flight generations */}
+        {inFlight.length > 0 && (
+          <div>
+            <div className="text-[10px] text-pink-400/60 uppercase tracking-widest font-mono mb-1.5">
+              Generating ({inFlight.length})
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              {inFlight.map(f => (
+                <div key={f.id} className="relative rounded-lg overflow-hidden border border-pink-500/20 bg-black/40">
+                  <div className="w-full aspect-square flex flex-col items-center justify-center p-2">
+                    {f.error ? (
+                      <>
+                        <div className="text-red-400 text-lg mb-1">✕</div>
+                        <div className="text-[9px] text-red-400 font-mono text-center">{f.error}</div>
+                        <button
+                          onClick={() => setInFlight(prev => prev.filter(x => x.id !== f.id))}
+                          className="mt-1 text-[9px] text-gray-400 hover:text-gray-200 font-mono"
+                        >dismiss</button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl mb-2 animate-pulse">🎨</div>
+                        <div className="text-[9px] text-pink-300 font-mono text-center line-clamp-2">{f.prompt}</div>
+                        <div className="text-[8px] text-gray-500 font-mono mt-1">
+                          {IMAGINE_MODELS.find(m => m.key === f.model)?.label || f.model}
+                        </div>
+                        {/* Pulsing progress bar */}
+                        <div className="w-full mt-2 h-1 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 animate-pulse rounded-full" style={{ width: `${Math.min(90, ((Date.now() - f.startedAt) / 300))}%` }} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Gallery */}
+        {generatedImages.length > 0 && (
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-widest font-mono mb-1.5">
+              Gallery ({generatedImages.length})
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[...generatedImages].reverse().map(img => (
+                <div key={img.id} className="group relative rounded-lg overflow-hidden border border-gray-700/30 bg-black/40">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.url}
+                    alt={img.prompt}
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
+                  />
+                  {/* Hover actions overlay */}
+                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+                    <div className="text-[9px] text-gray-300 font-mono text-center line-clamp-2 mb-1">{img.prompt}</div>
+                    <div className="flex gap-1 w-full">
+                      <button
+                        onClick={() => enterPlacementMode({ type: 'image', name: img.prompt.slice(0, 24), imageUrl: img.url })}
+                        className="flex-1 text-[10px] px-2 py-1 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30 hover:bg-pink-500/30 transition-colors font-mono"
+                      >
+                        Place
+                      </button>
+                      <button
+                        onClick={() => enterPlacementMode({ type: 'image', name: img.prompt.slice(0, 24), imageUrl: img.url, imageFrame: true })}
+                        className="text-[10px] px-2 py-1 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors font-mono"
+                        title="Place with golden frame"
+                      >
+                        🖼️
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => handleUseAsTile(img)}
+                      className="w-full text-[10px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors font-mono"
+                    >
+                      Use as tile
+                    </button>
+                    <button
+                      onClick={() => removeGeneratedImage(img.id)}
+                      className="w-full text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-400/60 border border-red-500/20 hover:bg-red-500/20 hover:text-red-300 transition-colors font-mono"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {generatedImages.length === 0 && inFlight.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+            <div className="text-3xl mb-2">🎨</div>
+            <div className="text-xs">No images generated yet</div>
+            <div className="text-[10px] mt-1 text-gray-500">Type a prompt and hit Imagine</div>
+          </div>
+        )}
+
+        {/* Custom ground textures summary */}
+        {customGroundPresets.length > 0 && (
+          <div className="border-t border-gray-700/30 pt-2">
+            <div className="text-[10px] text-emerald-400/60 uppercase tracking-widest font-mono mb-1">
+              Custom Tile Textures ({customGroundPresets.length})
+            </div>
+            <div className="text-[9px] text-gray-500 font-mono">
+              Available in World tab → Ground palette
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // WIZARD CONSOLE — Main popup component
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -424,6 +671,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const [isResizing, setIsResizing] = useState(false)
   const dragStart = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ width: 0, height: 0, x: 0, y: 0 })
+  // ░▒▓ Adaptive tabs — measure overflow, downgrade to icon-only when needed ▓▒░
+  const tabStripRef = useRef<HTMLDivElement>(null)
+  const [showTabLabels, setShowTabLabels] = useState(size.width >= 620)
 
   // ░▒▓ Persist window geometry to localStorage on drag/resize end ▓▒░
   useEffect(() => {
@@ -433,8 +683,19 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
     }
   }, [isDragging, isResizing, position, size])
 
+  // ░▒▓ Tab label overflow detection — try labels at wide sizes, downgrade if overflow ▓▒░
+  useEffect(() => { setShowTabLabels(size.width >= 620) }, [size.width])
+  useEffect(() => {
+    const el = tabStripRef.current
+    if (!el || !showTabLabels) return
+    // After render with labels: if content overflows, switch to icons only
+    requestAnimationFrame(() => {
+      if (el.scrollWidth > el.clientWidth + 4) setShowTabLabels(false)
+    })
+  }, [showTabLabels, size.width])
+
   // ─═̷─ Wizard state ─═̷─
-  const [mode, setMode] = useState<'conjure' | 'craft' | 'world' | 'assets' | 'placed' | 'settings'>('conjure')
+  const [mode, setMode] = useState<'conjure' | 'craft' | 'world' | 'assets' | 'placed' | 'imagine' | 'settings'>('conjure')
   const [provider, setProvider] = useState<ProviderName>('meshy')
   const [tier, setTier] = useState(PROVIDERS[0].tiers[1]?.id || PROVIDERS[0].tiers[0].id)  // Default: textured (refine)
   const [prompt, setPrompt] = useState('')
@@ -519,6 +780,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const exitPaintMode = useOasisStore(s => s.exitPaintMode)
   const setPaintBrushSize = useOasisStore(s => s.setPaintBrushSize)
   const clearAllGroundTiles = useOasisStore(s => s.clearAllGroundTiles)
+  const customGroundPresets = useOasisStore(s => s.customGroundPresets)
 
   // ─═̷─ World sky ─═̷─
   const worldSkyBackground = useOasisStore(s => s.worldSkyBackground)
@@ -557,8 +819,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
   const placedCatalogAssets = useOasisStore(s => s.placedCatalogAssets)
   const placeCatalogAsset = useOasisStore(s => s.placeCatalogAsset)
   const removeCatalogAsset = useOasisStore(s => s.removeCatalogAsset)
+  const generatedImages = useOasisStore(s => s.generatedImages)
   const [assetCategory, setAssetCategory] = useState<string>('all')
-  const [assetSubTab, setAssetSubTab] = useState<'catalog' | 'conjured' | 'crafted'>('catalog')
+  const [assetSubTab, setAssetSubTab] = useState<'catalog' | 'conjured' | 'crafted' | 'images'>('catalog')
   const [previewAsset, setPreviewAsset] = useState<AssetDefinition | null>(null)
   const [previewConjured, setPreviewConjured] = useState<ConjuredAsset | null>(null)
   const [previewCrafted, setPreviewCrafted] = useState<CraftedScene | null>(null)
@@ -749,6 +1012,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
       prompt: craftPrompt,
       objects: [],
       position: [0, 0, 0],
+      model: craftModel,
       createdAt: new Date().toISOString(),
     }
 
@@ -766,8 +1030,13 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
 
       if (!res.body) throw new Error('No stream body')
 
-      // Add placeholder scene to world — VFX plays, position offset calculated
-      addCraftedScene(placeholderScene)
+      // Add placeholder scene to world — VFX plays, position offset calculated.
+      // Guard: only add if we're still in the origin world. If the user switched worlds
+      // while the fetch was in-flight, don't contaminate the new world with this craft.
+      // The isolation block at stream-end will still save the result to the origin world.
+      if (useOasisStore.getState().activeWorldId === originWorldId) {
+        addCraftedScene(placeholderScene)
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -804,6 +1073,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
         objects: finalParsed.objects,
         position: [0, 0, 0],
         createdAt: placeholderScene.createdAt,
+        model: craftModel,
       }
 
       if (finalParsed.objects.length === 0) {
@@ -994,91 +1264,64 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
             : 'rgba(30, 30, 30, 0.5)',
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-lg">🧙‍♂️</span>
-          <span className="text-sm tracking-widest" style={{ color: forgeColor, fontFamily: "'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif", fontWeight: 700, fontVariant: 'small-caps', letterSpacing: '0.15em' }}>Wizard Console</span>
+          {size.width >= 420 && <span className="text-sm tracking-widest" style={{ color: forgeColor, fontFamily: "'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif", fontWeight: 700, fontVariant: 'small-caps', letterSpacing: '0.15em' }}>Wizard Console</span>}
           {activeCount > 0 && (
-            <span className="text-yellow-400 text-xs animate-pulse">&#9679; {activeCount} active</span>
+            <span className="text-yellow-400 text-xs animate-pulse">&#9679; {activeCount}</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Mode tabs */}
-          <button
-            onClick={() => setMode('conjure')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              mode === 'conjure'
-                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
-                : 'text-gray-300 border border-transparent hover:text-white'
-            }`}
-          >
-            Conjure
-          </button>
-          <button
-            onClick={() => setMode('craft')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              mode === 'craft'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-                : 'text-gray-300 border border-transparent hover:text-white'
-            }`}
-            title="LLM procedural geometry"
-          >
-            Craft
-          </button>
-          <button
-            onClick={() => setMode('world')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              mode === 'world'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                : 'text-gray-300 border border-transparent hover:text-white'
-            }`}
-            title="Sky, ground, terrain"
-          >
-            World
-          </button>
-          <button
-            onClick={() => setMode('assets')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              mode === 'assets'
-                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
-                : 'text-gray-300 border border-transparent hover:text-white'
-            }`}
-            title="Pre-made 3D asset catalog"
-          >
-            Assets
-          </button>
-          <button
-            onClick={() => setMode('placed')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              mode === 'placed'
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                : 'text-gray-300 border border-transparent hover:text-white'
-            }`}
-            title="All objects placed in this world"
-          >
-            Placed
-          </button>
-
-          {/* Settings tab */}
-          <button
-            onClick={() => setMode('settings')}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ml-1 ${
-              mode === 'settings'
-                ? 'bg-gray-500/20 text-gray-300 border border-gray-500/50'
-                : 'text-gray-400 border border-transparent hover:text-gray-300'
-            }`}
-            title="VFX + Placement Settings"
-          >
-            &#9881;
-          </button>
-
-          {/* Close */}
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors text-lg leading-none ml-2"
-          >
-            &#215;
-          </button>
+        <div className="flex items-center gap-1 min-w-0 flex-1 ml-2 overflow-hidden">
+          {/* ░▒▓ Adaptive tab strip — icons always, labels when there's room ▓▒░ */}
+          <div ref={tabStripRef} className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1" style={{ scrollbarWidth: 'none' }}>
+            {([
+              { key: 'conjure', label: 'Conjure', icon: '✨', color: 'orange', title: 'Text-to-3D conjuring' },
+              { key: 'craft', label: 'Craft', icon: '⚒️', color: 'blue', title: 'LLM procedural geometry' },
+              { key: 'world', label: 'World', icon: '🌍', color: 'emerald', title: 'Sky, ground, terrain' },
+              { key: 'assets', label: 'Assets', icon: '📦', color: 'yellow', title: 'Pre-made 3D asset catalog' },
+              { key: 'placed', label: 'Placed', icon: '📍', color: 'cyan', title: 'All objects placed in this world' },
+              { key: 'imagine', label: 'Imagine', icon: '🎨', color: 'pink', title: 'Text-to-image (Gemini)' },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setMode(tab.key)}
+                className={`text-xs px-1.5 py-0.5 rounded transition-colors whitespace-nowrap ${
+                  mode === tab.key
+                    ? `bg-${tab.color}-500/20 text-${tab.color}-400 border border-${tab.color}-500/50`
+                    : 'text-gray-300 border border-transparent hover:text-white'
+                }`}
+                title={tab.title}
+                style={mode === tab.key ? {
+                  backgroundColor: `rgba(${tab.color === 'orange' ? '249,115,22' : tab.color === 'blue' ? '59,130,246' : tab.color === 'emerald' ? '16,185,129' : tab.color === 'yellow' ? '234,179,8' : tab.color === 'cyan' ? '6,182,212' : '236,72,153'}, 0.2)`,
+                  color: `rgb(${tab.color === 'orange' ? '251,146,60' : tab.color === 'blue' ? '96,165,250' : tab.color === 'emerald' ? '52,211,153' : tab.color === 'yellow' ? '250,204,21' : tab.color === 'cyan' ? '34,211,238' : '244,114,182'})`,
+                  borderColor: `rgba(${tab.color === 'orange' ? '249,115,22' : tab.color === 'blue' ? '59,130,246' : tab.color === 'emerald' ? '16,185,129' : tab.color === 'yellow' ? '234,179,8' : tab.color === 'cyan' ? '6,182,212' : '236,72,153'}, 0.5)`,
+                } : undefined}
+              >
+                <span>{tab.icon}</span>{showTabLabels && <span className="ml-1">{tab.label}</span>}
+              </button>
+            ))}
+          </div>
+          {/* ░▒▓ Fixed controls — NEVER shrink, always visible ▓▒░ */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setMode('settings')}
+              className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                mode === 'settings'
+                  ? 'bg-gray-500/20 text-gray-300 border border-gray-500/50'
+                  : 'text-gray-400 border border-transparent hover:text-gray-300'
+              }`}
+              title="VFX + Placement Settings"
+            >
+              &#9881;
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-white transition-colors text-lg leading-none ml-1"
+            >
+              &#215;
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1431,7 +1674,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 <div className="mb-2 p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10">
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="text-[10px] text-emerald-300 font-mono font-bold">
-                      {'\u{1F3A8}'} PAINT MODE — {GROUND_PRESETS.find(p => p.id === paintBrushPresetId)?.name}
+                      {'\u{1F3A8}'} PAINT MODE — {[...GROUND_PRESETS, ...customGroundPresets].find(p => p.id === paintBrushPresetId)?.name}
                     </div>
                     <button
                       onClick={exitPaintMode}
@@ -1502,6 +1745,40 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                       <div className="flex items-center gap-1">
                         <span className="text-sm">{preset.icon}</span>
                         <span className={`text-[10px] font-medium ${isPaintBrush ? 'text-emerald-300' : 'text-gray-400'}`}>
+                          {preset.name}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+                {/* ░▒▓ Custom textures from Imagine ▓▒░ */}
+                {customGroundPresets.map(preset => {
+                  const isPaintBrush = paintMode && paintBrushPresetId === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => enterPaintMode(preset.id)}
+                      className={`rounded-lg border p-2 transition-all duration-200 text-left ${
+                        isPaintBrush
+                          ? 'border-pink-400/80 bg-pink-500/20 scale-[1.02] ring-1 ring-pink-400/40'
+                          : 'border-gray-700/30 bg-black/40 hover:border-pink-500/30 hover:bg-pink-500/5'
+                      }`}
+                      title={`Paint with ${preset.name} (custom)`}
+                    >
+                      <div className="w-full aspect-square rounded-md mb-1.5 border border-pink-500/10 overflow-hidden bg-gray-800">
+                        {preset.customTextureUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={preset.customTextureUrl}
+                            alt={preset.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm">{preset.icon}</span>
+                        <span className={`text-[10px] font-medium truncate ${isPaintBrush ? 'text-pink-300' : 'text-gray-400'}`}>
                           {preset.name}
                         </span>
                       </div>
@@ -1967,6 +2244,7 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 { key: 'catalog' as const, label: 'Catalog', count: ASSET_CATALOG.length, color: 'yellow' },
                 { key: 'conjured' as const, label: 'Conjured', count: conjuredAssets.filter(a => a.status === 'ready').length, color: 'orange' },
                 { key: 'crafted' as const, label: 'Crafted', count: sceneLibrary.length, color: 'blue' },
+                { key: 'images' as const, label: 'Images', count: generatedImages.length, color: 'pink' },
               ]).map(tab => (
                 <button
                   key={tab.key}
@@ -1977,9 +2255,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                       : 'text-gray-400 border border-gray-700/30 hover:text-gray-200 hover:border-gray-600/50'
                   }`}
                   style={assetSubTab === tab.key ? {
-                    background: tab.color === 'yellow' ? 'rgba(234,179,8,0.15)' : tab.color === 'orange' ? 'rgba(249,115,22,0.15)' : 'rgba(59,130,246,0.15)',
-                    color: tab.color === 'yellow' ? '#FDE047' : tab.color === 'orange' ? '#FB923C' : '#93C5FD',
-                    borderColor: tab.color === 'yellow' ? 'rgba(234,179,8,0.4)' : tab.color === 'orange' ? 'rgba(249,115,22,0.4)' : 'rgba(59,130,246,0.4)',
+                    background: tab.color === 'yellow' ? 'rgba(234,179,8,0.15)' : tab.color === 'orange' ? 'rgba(249,115,22,0.15)' : tab.color === 'pink' ? 'rgba(236,72,153,0.15)' : 'rgba(59,130,246,0.15)',
+                    color: tab.color === 'yellow' ? '#FDE047' : tab.color === 'orange' ? '#FB923C' : tab.color === 'pink' ? '#F9A8D4' : '#93C5FD',
+                    borderColor: tab.color === 'yellow' ? 'rgba(234,179,8,0.4)' : tab.color === 'orange' ? 'rgba(249,115,22,0.4)' : tab.color === 'pink' ? 'rgba(236,72,153,0.4)' : 'rgba(59,130,246,0.4)',
                   } : {}}
                 >
                   {tab.label}
@@ -2182,6 +2460,58 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                 )}
               </>
             )}
+
+            {/* ░▒▓ IMAGES SUB-TAB — Generated images from Imagine ▓▒░ */}
+            {assetSubTab === 'images' && (
+              <>
+                {generatedImages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                    <div className="text-3xl mb-2">🎨</div>
+                    <div className="text-xs">No generated images yet</div>
+                    <div className="text-[10px] mt-1 text-gray-500">Use the Imagine tab to generate images</div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[...generatedImages].reverse().map(img => {
+                      const isPlaced = placedCatalogAssets.some(ca => ca.imageUrl === img.url)
+                      return (
+                        <div
+                          key={img.id}
+                          className={`rounded-lg border p-1.5 transition-all duration-200 text-left group cursor-pointer ${
+                            isPlaced ? 'border-pink-500/30 bg-pink-500/5' : 'hover:border-pink-500/40 hover:bg-pink-500/5'
+                          }`}
+                          style={{
+                            background: isPlaced ? undefined : 'rgba(15, 15, 15, 0.8)',
+                            borderColor: isPlaced ? undefined : 'rgba(255, 255, 255, 0.06)',
+                          }}
+                        >
+                          <div className="w-full aspect-square rounded bg-black/40 flex items-center justify-center mb-1 overflow-hidden relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img.url} alt={img.prompt} className="w-full h-full object-cover" loading="lazy" />
+                            {/* Hover actions */}
+                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-2">
+                              <button
+                                onClick={() => enterPlacementMode({ type: 'image', name: img.prompt.slice(0, 24), imageUrl: img.url })}
+                                className="w-full text-[10px] px-2 py-1 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30 hover:bg-pink-500/30 transition-colors font-mono"
+                              >
+                                Place in world
+                              </button>
+                            </div>
+                          </div>
+                          <div className="text-[9px] text-gray-400 group-hover:text-gray-200 truncate transition-colors">
+                            {img.prompt}
+                          </div>
+                          <div className="text-[8px] text-gray-400 truncate">
+                            {new Date(img.createdAt).toLocaleDateString()}
+                            {isPlaced && <span className="ml-1 text-pink-400/60">placed</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )}
           </>
           )
 
@@ -2260,9 +2590,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
                       }}
                     >
                       <div>
-                        <span className="text-[10px] text-yellow-400 font-mono mr-1">&#128230;</span>
+                        <span className={`text-[10px] font-mono mr-1 ${ca.imageUrl ? 'text-pink-400' : 'text-yellow-400'}`}>{ca.imageUrl ? '🖼️' : '📦'}</span>
                         <span className="text-[11px] text-gray-200">{ca.name}</span>
-                        <span className="text-[9px] text-gray-400 ml-1.5">catalog</span>
+                        <span className="text-[9px] text-gray-400 ml-1.5">{ca.imageUrl ? 'image' : 'catalog'}</span>
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); removeCatalogAsset(ca.id) }}
@@ -2531,6 +2861,9 @@ export function WizardConsole({ isOpen, onClose }: WizardConsoleProps) {
 
             </div>
           </>
+
+        ) : mode === 'imagine' ? (
+          <ImagineTab />
 
         ) : mode === 'conjure' ? (
           <>

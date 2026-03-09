@@ -154,8 +154,16 @@ export function retargetClipForVRM(
     if (node) mixamoToNodeName[mixamoBare] = node.name
   }
 
+  // ░▒▓ REST-POSE COMPENSATION — the key to non-twisted VRM animations ▓▒░
+  // Mixamo tracks store ABSOLUTE quaternions (bone's local rotation in that frame).
+  // VRM normalized bones expect DELTAS from identity (T-pose = no rotation).
+  // Formula: vrmRotation = mixamoRestInverse × mixamoAbsoluteRotation
+  const animId = clip.name.replace(LIB_PREFIX, '')
+  const restRotations = mixamoRestCache.get(animId)
+
   let remapped = 0
   let unmapped = 0
+  let compensated = 0
 
   const tracks = clip.tracks.map(track => {
     const dotIdx = track.name.indexOf('.')
@@ -172,6 +180,24 @@ export function retargetClipForVRM(
       remapped++
       const t = track.clone()
       t.name = nodeName + property
+
+      // Apply rest-pose compensation to quaternion tracks
+      // This is the difference between "Mixamo says rotate to Q" and "VRM says rotate by delta-Q"
+      if (property === '.quaternion' && restRotations) {
+        const restQ = restRotations.get(boneName)
+        if (restQ) {
+          const restInv = restQ.clone().invert()
+          const vals = t.values
+          const tmpQ = new THREE.Quaternion()
+          for (let i = 0; i < vals.length; i += 4) {
+            tmpQ.set(vals[i], vals[i + 1], vals[i + 2], vals[i + 3])
+            tmpQ.premultiply(restInv)  // result = restInv * animQ
+            vals[i] = tmpQ.x; vals[i + 1] = tmpQ.y; vals[i + 2] = tmpQ.z; vals[i + 3] = tmpQ.w
+          }
+          compensated++
+        }
+      }
+
       return t
     }
 
@@ -181,7 +207,7 @@ export function retargetClipForVRM(
 
   const retargeted = new THREE.AnimationClip(clip.name, clip.duration, tracks)
   retargetCache.set(fullKey, retargeted)
-  console.log(`[AnimLib:VRM] Retargeted "${clip.name}" (${cacheKey}): ${remapped} bones mapped, ${unmapped} unmapped`)
+  console.log(`[AnimLib:VRM] Retargeted "${clip.name}" (${cacheKey}): ${remapped} mapped, ${compensated} compensated, ${unmapped} unmapped`)
   return retargeted
 }
 
@@ -329,6 +355,13 @@ export function retargetClip(
 const clipCache = new Map<string, THREE.AnimationClip>()
 const loadingPromises = new Map<string, Promise<THREE.AnimationClip | null>>()
 
+// ░▒▓ MIXAMO REST ROTATIONS — per-bone T-pose quaternions extracted from FBX skeleton ▓▒░
+// VRM normalized bones expect rotations relative to identity (T-pose = no rotation).
+// Mixamo tracks store ABSOLUTE rotations. To convert:
+//   VRM_normalized = MixamoRestInverse × MixamoAbsolute
+// This strips the Mixamo rest frame, leaving only the pure delta.
+const mixamoRestCache = new Map<string, Map<string, THREE.Quaternion>>()
+
 /** The lib: prefix indicates a library animation in behavior config */
 export const LIB_PREFIX = 'lib:'
 
@@ -370,6 +403,24 @@ export async function loadAnimationClip(animId: string): Promise<THREE.Animation
       if (!fbx.animations || fbx.animations.length === 0) {
         console.warn(`[AnimLib] ${animId}: FBX has no animations`)
         return null
+      }
+
+      // ░▒▓ Extract Mixamo rest rotations from FBX skeleton ▓▒░
+      // "Without skin" FBX still has bones in T-pose. Their .quaternion = rest rotation.
+      // We need this to compensate VRM normalized animations later.
+      const restRotations = new Map<string, THREE.Quaternion>()
+      fbx.traverse((child) => {
+        if ((child as THREE.Bone).isBone) {
+          let name = child.name
+          // Same normalization as track names
+          if (name.includes('|')) name = name.split('|').pop()!
+          name = name.replace(/:/g, '')
+          restRotations.set(name, child.quaternion.clone())
+        }
+      })
+      if (restRotations.size > 0) {
+        mixamoRestCache.set(animId, restRotations)
+        console.log(`[AnimLib] ${animId}: extracted ${restRotations.size} bone rest rotations`)
       }
 
       // Extract the first clip

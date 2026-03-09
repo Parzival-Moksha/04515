@@ -49,7 +49,7 @@ function ForgeGround() {
         <circleGeometry args={[2.8, 64]} />
         <meshStandardMaterial color="#1a0a00" transparent opacity={0.5} />
       </mesh>
-      <Html position={[0, 0.1, 4]} center>
+      <Html position={[0, 0.1, 4]} center style={{ pointerEvents: 'none' }}>
         <div className="text-xs text-orange-500/40 font-mono tracking-[0.3em] select-none pointer-events-none">
           CONJURING CIRCLE
         </div>
@@ -105,6 +105,7 @@ export function ForgeRealm() {
   const worldLights = useOasisStore(s => s.worldLights)
   const avatar3dUrl = useOasisStore(s => s.avatar3dUrl)
   const isViewMode = useOasisStore(s => s.isViewMode)
+  const customGroundPresets = useOasisStore(s => s.customGroundPresets)
 
   // ░▒▓ Background thumbnail gen — renders missing thumbnails offscreen ▓▒░
   useThumbnailGenerator()
@@ -129,7 +130,7 @@ export function ForgeRealm() {
       <EnvironmentIntensitySync lights={worldLights} />
 
       {/* GROUND — GroundPlane handles base ground + painted tiles + paint mode */}
-      <GroundPlane preset={groundPreset} groundTiles={groundTiles} paintMode={paintMode} />
+      <GroundPlane preset={groundPreset} groundTiles={groundTiles} paintMode={paintMode} customGroundPresets={customGroundPresets} />
 
       {/* ░▒▓ WORLD OBJECTS — shared renderer for all placed assets ▓▒░ */}
       <WorldObjectsRenderer />
@@ -143,7 +144,7 @@ export function ForgeRealm() {
 
       {/* Empty state hint */}
       {isEmpty && (
-        <Html position={[0, 2, 0]} center>
+        <Html position={[0, 2, 0]} center style={{ pointerEvents: 'none' }}>
           <div className="text-center select-none pointer-events-none">
             <div className="text-4xl mb-2 opacity-30">🔥</div>
             <div className="text-sm text-gray-500 opacity-50">
