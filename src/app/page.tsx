@@ -39,7 +39,7 @@ export default function OasisPage() {
     const viewParam = params.get('view')
 
     if (viewParam) {
-      enterViewMode(viewParam)
+      enterViewMode(viewParam, !!session)  // anonymous users get read-only, even on public_edit
       window.history.replaceState({}, '', window.location.pathname)
     } else if (worldParam && session) {
       const registry = useOasisStore.getState().worldRegistry

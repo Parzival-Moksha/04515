@@ -268,7 +268,7 @@ interface OasisState {
   importWorldFromJson: (json: string) => Promise<string | null>  // returns new world id or null
   initWorlds: () => Promise<void>                                // hydrate registry + scene library on mount
   setAvatar3dUrl: (url: string | null) => void
-  enterViewMode: (worldId: string) => void                       // load a public world read-only
+  enterViewMode: (worldId: string, allowEdit?: boolean) => void   // load a public world (allowEdit=false for anonymous)
   exitViewMode: () => void                                       // return to user's own world
 
   // ─═̷─═̷─⏪ UNDO/REDO ─═̷─═̷─⏪
@@ -1113,7 +1113,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
   setAvatar3dUrl: (url) => set({ avatar3dUrl: url }),
 
   // ─═̷─═̷─👁️ VIEW MODE — peek into someone else's world (read-only) ─═̷─═̷─👁️
-  enterViewMode: (worldId) => {
+  enterViewMode: (worldId, allowEdit = true) => {
     // Save current world before entering view mode (if not already viewing)
     if (!get().isViewMode && get()._worldReady) {
       cancelPendingSave()
@@ -1131,12 +1131,13 @@ export const useOasisStore = create<OasisState>((set, get) => {
         return
       }
       const { state, meta } = result
-      const isEditable = meta.visibility === 'public_edit'
+      // Only allow editing if caller permits AND world is public_edit
+      const isEditable = allowEdit && meta.visibility === 'public_edit'
       const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
       const lights = state.lights !== undefined ? state.lights : defaultLights
       const viewObjCount = (state.conjuredAssetIds?.length || 0) + (state.catalogPlacements?.length || 0) + (state.craftedScenes?.length || 0)
       set({
-        _worldReady: isEditable, // Allow saves for public_edit worlds
+        _worldReady: isEditable, // Only allow saves for authenticated public_edit
         _loadedObjectCount: viewObjCount,
         isViewModeEditable: isEditable,
         viewingWorldMeta: { name: meta.name, icon: meta.icon, creator_name: meta.creator_name, creator_avatar: meta.creator_avatar, visibility: meta.visibility },

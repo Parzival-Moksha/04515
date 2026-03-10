@@ -124,6 +124,7 @@ export function SelectableWrapper({ id, children, selected, onSelect, transformM
   const groupRef = useRef<THREE.Group>(null)
   const { setIsDragging } = useContext(DragContext)
   const setInspectedObject = useOasisStore(s => s.setInspectedObject)
+  const isReadOnly = useOasisStore(s => s.isViewMode && !s.isViewModeEditable)
 
   // ░▒▓ Movement system — reads behavior from store, applies every frame ▓▒░
   const behavior = useOasisStore(s => s.behaviors[id])
@@ -181,6 +182,7 @@ export function SelectableWrapper({ id, children, selected, onSelect, transformM
         ref={groupRef}
         visible={isVisible}
         onClick={(e) => {
+          if (isReadOnly) return  // ░▒▓ Anonymous visitors can't select/modify objects ▓▒░
           e.stopPropagation()
           onSelect(id)
           setInspectedObject(id)  // ░▒▓ One click = select + inspect (no double-click needed) ▓▒░
@@ -197,7 +199,7 @@ export function SelectableWrapper({ id, children, selected, onSelect, transformM
       </group>
 
       {/* TransformControls — callback ref ensures listener attaches on mount */}
-      {selected && groupRef.current && (
+      {selected && groupRef.current && !isReadOnly && (
         <TransformControls
           ref={controlsCallbackRef}
           object={groupRef.current}
@@ -1036,6 +1038,10 @@ export function TransformKeyHandler() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if ((e.target as HTMLElement).isContentEditable) return
+
+      // Block ALL edit shortcuts in read-only view mode (anonymous or non-editable)
+      const { isViewMode: vm, isViewModeEditable: vme } = useOasisStore.getState()
+      if (vm && !vme) return
 
       const key = e.key.toLowerCase()
 
