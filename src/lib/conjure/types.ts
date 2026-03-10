@@ -237,8 +237,8 @@ export interface CatalogPlacement {
   scale: number
   /** When set, renders as a textured plane (generated image) instead of loading GLB */
   imageUrl?: string
-  /** Show procedural picture frame around image plane */
-  imageFrame?: boolean
+  /** Frame style ID — if set, renders a decorative frame around the image plane */
+  imageFrameStyle?: string
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

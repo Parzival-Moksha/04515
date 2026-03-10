@@ -37,10 +37,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Middleware uses this to decide: allow or redirect to login
     authorized({ auth: session, request }) {
       const isLoggedIn = !!session?.user
-      const isOnLogin = request.nextUrl.pathname.startsWith('/login')
+      const { pathname, searchParams } = request.nextUrl
+      const isOnLogin = pathname.startsWith('/login')
 
       if (isOnLogin) {
         if (isLoggedIn) return Response.redirect(new URL('/', request.nextUrl))
+        return true
+      }
+
+      // Root page: allow without auth — page.tsx handles routing
+      // (anon + ?view= → view mode, anon + no param → redirect to /explore)
+      // Safe: all mutations are server-gated with session checks
+      if (pathname === '/') {
         return true
       }
 

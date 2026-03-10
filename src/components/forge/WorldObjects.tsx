@@ -27,7 +27,7 @@ import type { MovementPreset, AnimationConfig } from '../../lib/conjure/types'
 import { extractModelStats } from './ModelPreview'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm'
-import { loadAnimationClip, retargetClipForVRM, LIB_PREFIX } from '../../lib/forge/animation-library'
+import { loadAnimationClip, loadClipFromGLTF, retargetClipForVRM, LIB_PREFIX } from '../../lib/forge/animation-library'
 import type { PlacementPending } from '../../store/oasisStore'
 
 // ░▒▓ CLIPBOARD — module-level, survives across renders, no reactivity needed ▓▒░
@@ -253,48 +253,204 @@ class CatalogModelErrorBoundary extends React.Component<
 // ░▒▓ A single quad, double-sided, bearing the vision Gemini dreamed ▓▒░
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function ImagePlaneRenderer({ imageUrl, scale, showFrame = false }: { imageUrl: string; scale: number; showFrame?: boolean }) {
+// ─═̷─ FRAME STYLE DEFINITIONS — 8 wildly different picture frames ─═̷─
+export interface FrameStyleDef {
+  id: string
+  label: string
+  icon: string
+  desc: string
+}
+
+export const FRAME_STYLES: FrameStyleDef[] = [
+  { id: 'gilded',    label: 'Gilded',     icon: '🖼️', desc: 'Classic gold museum frame' },
+  { id: 'neon',      label: 'Neon',       icon: '💜', desc: 'Glowing neon cyberpunk border' },
+  { id: 'thin',      label: 'Minimal',    icon: '▫️', desc: 'Hairline black wire frame' },
+  { id: 'baroque',   label: 'Baroque',    icon: '👑', desc: 'Thick ornate royal frame' },
+  { id: 'hologram',  label: 'Hologram',   icon: '🔮', desc: 'Floating holographic projection' },
+  { id: 'rustic',    label: 'Rustic',     icon: '🪵', desc: 'Weathered dark wood' },
+  { id: 'ice',       label: 'Frozen',     icon: '🧊', desc: 'Translucent ice crystal frame' },
+  { id: 'void',      label: 'Void',       icon: '🕳️', desc: 'Dark portal with swirling edge' },
+]
+
+// ─═̷─ FOUR-BAR FRAME BUILDER — reusable for box-based frame geometry ─═̷─
+function FourBarFrame({ w, h, border, depth, color, roughness = 0.5, metalness = 0.3, emissive, emissiveIntensity = 0, opacity = 1, transparent = false }: {
+  w: number; h: number; border: number; depth: number
+  color: string; roughness?: number; metalness?: number
+  emissive?: string; emissiveIntensity?: number; opacity?: number; transparent?: boolean
+}) {
+  const matProps = { color, roughness, metalness, ...(emissive && { emissive, emissiveIntensity }), ...(transparent && { transparent, opacity }) }
+  return (
+    <group position={[0, 0, -depth / 2]}>
+      <mesh position={[0, (h + border) / 2, 0]}>
+        <boxGeometry args={[w + border * 2, border, depth]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      <mesh position={[0, -(h + border) / 2, 0]}>
+        <boxGeometry args={[w + border * 2, border, depth]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      <mesh position={[-(w + border) / 2, 0, 0]}>
+        <boxGeometry args={[border, h, depth]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      <mesh position={[(w + border) / 2, 0, 0]}>
+        <boxGeometry args={[border, h, depth]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+    </group>
+  )
+}
+
+// ─═̷─ ANIMATED FRAME WRAPPERS ─═̷─
+
+function NeonFrame({ w, h, scale }: { w: number; h: number; scale: number }) {
+  const groupRef = useRef<THREE.Group>(null)
+  useFrame((_, delta) => {
+    if (!groupRef.current) return
+    // Pulsing glow via scale oscillation
+    const t = Date.now() * 0.003
+    const pulse = 1 + Math.sin(t) * 0.015
+    groupRef.current.scale.set(pulse, pulse, 1)
+  })
+  const border = 0.015 * scale
+  const depth = 0.008 * scale
+  return (
+    <group ref={groupRef}>
+      {/* Inner bright edge */}
+      <FourBarFrame w={w} h={h} border={border} depth={depth} color="#A855F7" roughness={0.1} metalness={0.9} emissive="#A855F7" emissiveIntensity={3} />
+      {/* Outer softer glow */}
+      <FourBarFrame w={w + border * 2} h={h + border * 2} border={border * 0.6} depth={depth * 0.5} color="#7C3AED" roughness={0.2} metalness={0.5} emissive="#7C3AED" emissiveIntensity={1.5} transparent opacity={0.6} />
+    </group>
+  )
+}
+
+function HologramFrame({ w, h, scale }: { w: number; h: number; scale: number }) {
+  const groupRef = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (!groupRef.current) return
+    const t = Date.now() * 0.001
+    // Gentle float + rotation wobble
+    groupRef.current.position.y = Math.sin(t * 1.5) * 0.02 * scale
+    groupRef.current.rotation.z = Math.sin(t * 0.7) * 0.005
+  })
+  const gap = 0.03 * scale
+  const cornerSize = 0.06 * scale
+  const thickness = 0.008 * scale
+  // Corner brackets instead of full frame
+  return (
+    <group ref={groupRef}>
+      {[[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([sx, sy], i) => (
+        <group key={i} position={[sx * (w / 2 + gap), sy * (h / 2 + gap), 0]}>
+          <mesh position={[sx * cornerSize / 2, 0, 0]}>
+            <boxGeometry args={[cornerSize, thickness, thickness]} />
+            <meshStandardMaterial color="#22D3EE" emissive="#22D3EE" emissiveIntensity={2} transparent opacity={0.8} metalness={0.9} roughness={0.1} />
+          </mesh>
+          <mesh position={[0, sy * cornerSize / 2, 0]}>
+            <boxGeometry args={[thickness, cornerSize, thickness]} />
+            <meshStandardMaterial color="#22D3EE" emissive="#22D3EE" emissiveIntensity={2} transparent opacity={0.8} metalness={0.9} roughness={0.1} />
+          </mesh>
+        </group>
+      ))}
+      {/* Scanline effect — a thin bar that scrolls vertically */}
+      <ScanlineBar w={w + gap * 2} h={h + gap * 2} scale={scale} />
+    </group>
+  )
+}
+
+function ScanlineBar({ w, h, scale }: { w: number; h: number; scale: number }) {
+  const ref = useRef<THREE.Mesh>(null)
+  useFrame(() => {
+    if (!ref.current) return
+    const t = (Date.now() * 0.001) % 3 / 3 // 0→1 over 3 seconds
+    ref.current.position.y = (t - 0.5) * h
+    ;(ref.current.material as THREE.MeshStandardMaterial).opacity = 0.3 + Math.sin(t * Math.PI) * 0.3
+  })
+  return (
+    <mesh ref={ref}>
+      <planeGeometry args={[w, 0.005 * scale]} />
+      <meshStandardMaterial color="#22D3EE" emissive="#22D3EE" emissiveIntensity={1} transparent opacity={0.3} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
+
+function VoidFrame({ w, h, scale }: { w: number; h: number; scale: number }) {
+  const groupRef = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (!groupRef.current) return
+    // Slow dark rotation
+    groupRef.current.rotation.z = Math.sin(Date.now() * 0.0005) * 0.02
+  })
+  const border = 0.05 * scale
+  const depth = 0.03 * scale
+  return (
+    <group ref={groupRef}>
+      {/* Outer dark ring */}
+      <FourBarFrame w={w} h={h} border={border} depth={depth} color="#0a0a0a" roughness={0.9} metalness={0.1} emissive="#4C1D95" emissiveIntensity={0.4} />
+      {/* Inner bright edge — the event horizon */}
+      <FourBarFrame w={w} h={h} border={0.005 * scale} depth={0.003 * scale} color="#8B5CF6" roughness={0.0} metalness={1.0} emissive="#8B5CF6" emissiveIntensity={2.5} />
+    </group>
+  )
+}
+
+export function ImagePlaneRenderer({ imageUrl, scale, frameStyle }: { imageUrl: string; scale: number; frameStyle?: string }) {
   const texture = useLoader(THREE.TextureLoader, imageUrl)
   texture.colorSpace = THREE.SRGBColorSpace
 
-  // Aspect ratio from loaded image — default to 1:1 until texture loads
   const aspect = texture.image ? texture.image.width / texture.image.height : 1
-  const planeWidth = scale * aspect
-  const planeHeight = scale
-  const frameDepth = 0.02 * scale
-  const frameBorder = 0.04 * scale
+  const w = scale * aspect
+  const h = scale
 
   return (
-    <group position={[0, planeHeight / 2, 0]}>
+    <group position={[0, h / 2, 0]}>
       {/* The image itself — vertical, centered */}
       <mesh>
-        <planeGeometry args={[planeWidth, planeHeight]} />
+        <planeGeometry args={[w, h]} />
         <meshStandardMaterial map={texture} side={THREE.DoubleSide} roughness={0.8} metalness={0.0} />
       </mesh>
-      {/* Procedural picture frame — four beveled bars */}
-      {showFrame && (
-        <group position={[0, 0, -frameDepth / 2]}>
-          {/* Top bar */}
-          <mesh position={[0, (planeHeight + frameBorder) / 2, 0]}>
-            <boxGeometry args={[planeWidth + frameBorder * 2, frameBorder, frameDepth]} />
-            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
-          </mesh>
-          {/* Bottom bar */}
-          <mesh position={[0, -(planeHeight + frameBorder) / 2, 0]}>
-            <boxGeometry args={[planeWidth + frameBorder * 2, frameBorder, frameDepth]} />
-            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
-          </mesh>
-          {/* Left bar */}
-          <mesh position={[-(planeWidth + frameBorder) / 2, 0, 0]}>
-            <boxGeometry args={[frameBorder, planeHeight, frameDepth]} />
-            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
-          </mesh>
-          {/* Right bar */}
-          <mesh position={[(planeWidth + frameBorder) / 2, 0, 0]}>
-            <boxGeometry args={[frameBorder, planeHeight, frameDepth]} />
-            <meshStandardMaterial color="#8B6914" roughness={0.5} metalness={0.3} />
-          </mesh>
-        </group>
+
+      {/* ░▒▓ FRAME STYLES — each one a different vibe ▓▒░ */}
+
+      {/* 1. GILDED — classic gold museum frame */}
+      {frameStyle === 'gilded' && (
+        <FourBarFrame w={w} h={h} border={0.04 * scale} depth={0.02 * scale} color="#8B6914" roughness={0.4} metalness={0.6} />
+      )}
+
+      {/* 2. NEON — pulsing cyberpunk glow */}
+      {frameStyle === 'neon' && (
+        <NeonFrame w={w} h={h} scale={scale} />
+      )}
+
+      {/* 3. MINIMAL — hairline black wire frame */}
+      {frameStyle === 'thin' && (
+        <FourBarFrame w={w} h={h} border={0.006 * scale} depth={0.003 * scale} color="#1a1a1a" roughness={0.9} metalness={0.0} />
+      )}
+
+      {/* 4. BAROQUE — thick ornate royal frame, double border */}
+      {frameStyle === 'baroque' && (
+        <>
+          <FourBarFrame w={w} h={h} border={0.07 * scale} depth={0.035 * scale} color="#5C3A0E" roughness={0.3} metalness={0.7} />
+          <FourBarFrame w={w + 0.01 * scale} h={h + 0.01 * scale} border={0.015 * scale} depth={0.04 * scale} color="#DAA520" roughness={0.2} metalness={0.9} />
+        </>
+      )}
+
+      {/* 5. HOLOGRAM — floating corner brackets with scanline */}
+      {frameStyle === 'hologram' && (
+        <HologramFrame w={w} h={h} scale={scale} />
+      )}
+
+      {/* 6. RUSTIC — weathered dark wood */}
+      {frameStyle === 'rustic' && (
+        <FourBarFrame w={w} h={h} border={0.05 * scale} depth={0.025 * scale} color="#3E2723" roughness={0.95} metalness={0.0} />
+      )}
+
+      {/* 7. FROZEN — translucent ice crystal */}
+      {frameStyle === 'ice' && (
+        <FourBarFrame w={w} h={h} border={0.04 * scale} depth={0.02 * scale} color="#B3E5FC" roughness={0.05} metalness={0.1} transparent opacity={0.6} emissive="#81D4FA" emissiveIntensity={0.3} />
+      )}
+
+      {/* 8. VOID — dark portal with bright inner edge */}
+      {frameStyle === 'void' && (
+        <VoidFrame w={w} h={h} scale={scale} />
       )}
     </group>
   )
@@ -624,18 +780,23 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     return () => { mixer.stopAllAction(); mixerRef.current = null }
   }, [vrm])
 
-  // Load walk + idle clips, retarget for THIS VRM's actual normalized bone names
+  // ░▒▓ Load walk + idle clips from Mixamo FBX library, retarget for THIS VRM ▓▒░
+  // FBX pipeline maps 52/52 bones. GLTF characters use non-Mixamo names (4/34 = useless).
+  // 'idle' = "Breathing Idle" if available, falls back to 'idle-fight' (snappy but better than T-pose).
   const [walkClip, setWalkClip] = useState<THREE.AnimationClip | null>(null)
   const [idleClip, setIdleClip] = useState<THREE.AnimationClip | null>(null)
   useEffect(() => {
     if (!vrm) return
-    // cacheKey = objectId (per-NPC) so each VRM gets its own retargeted clip
     const key = objectId || 'vrm-npc'
     loadAnimationClip('walk').then(clip => {
       if (clip) setWalkClip(retargetClipForVRM(clip, vrm, key))
     })
-    loadAnimationClip('idle-fight').then(clip => {
-      if (clip) setIdleClip(retargetClipForVRM(clip, vrm, key + '-idle'))
+    // Try proper idle first, fall back to idle-fight
+    loadAnimationClip('idle').then(clip => {
+      if (clip) { setIdleClip(retargetClipForVRM(clip, vrm, key + '-idle')); return }
+      return loadAnimationClip('idle-fight').then(fbxClip => {
+        if (fbxClip) setIdleClip(retargetClipForVRM(fbxClip, vrm, key + '-idle'))
+      })
     })
   }, [vrm, objectId])
 
@@ -765,18 +926,13 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     }
   })
 
-  // Bounding box for proxy raycast — works with VRM scene or raw GLTF fallback
-  const bounds = useMemo(() => {
-    const target = vrm ? vrm.scene : gltf.scene
-    if (!target) return { size: new THREE.Vector3(1, 2, 1), center: new THREE.Vector3(0, 1, 0) }
-    const box = new THREE.Box3().setFromObject(target)
-    const size = box.getSize(new THREE.Vector3())
-    const center = box.getCenter(new THREE.Vector3())
-    if (size.x < 0.5) size.x = 0.5
-    if (size.y < 0.5) size.y = 0.5
-    if (size.z < 0.5) size.z = 0.5
-    return { size, center }
-  }, [vrm])
+  // ░▒▓ FIXED HUMANOID PROXY BOX — VRMs are always humanoid, skip Box3.setFromObject ▓▒░
+  // Box3.setFromObject uses WORLD matrices → timing-dependent → unreliable for proxy placement.
+  // All VRM avatars are ~1.5-1.8m tall humanoids. A fixed box is bulletproof.
+  const bounds = useMemo(() => ({
+    size: new THREE.Vector3(0.6, 1.7, 0.4),
+    center: new THREE.Vector3(0, 0.85, 0),
+  }), [])
 
   // Paint mode — disable proxy raycast so clicks pass through to ground
   useEffect(() => {
@@ -909,7 +1065,7 @@ export function TransformKeyHandler() {
         const objPos = state.transforms[id]?.position || [0, 0, 0]
         const catalog = state.placedCatalogAssets.find(a => a.id === id)
         if (catalog) {
-          _clipboard = { type: 'catalog', catalogId: catalog.catalogId, name: catalog.name, path: catalog.glbPath, defaultScale: catalog.scale, imageUrl: catalog.imageUrl }
+          _clipboard = { type: catalog.imageUrl ? 'image' : 'catalog', catalogId: catalog.catalogId, name: catalog.name, path: catalog.glbPath, defaultScale: catalog.scale, imageUrl: catalog.imageUrl, imageFrameStyle: catalog.imageFrameStyle }
           spawnCopyToast(catalog.position || objPos as [number, number, number])
           e.preventDefault()
           return
@@ -1286,7 +1442,7 @@ function PlacementOverlay() {
       const conjId = `conjured-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       placeCatalogAssetAt(conjId, placementPending.name, placementPending.path, placementPending.defaultScale || 1, pos)
     } else if (placementPending.type === 'image' && placementPending.imageUrl) {
-      placeImageAt(placementPending.name, placementPending.imageUrl, pos, placementPending.imageFrame)
+      placeImageAt(placementPending.name, placementPending.imageUrl, pos, placementPending.imageFrameStyle)
     } else if (placementPending.type === 'library' && placementPending.sceneId) {
       placeLibrarySceneAt(placementPending.sceneId, pos)
     } else if (placementPending.type === 'crafted' && placementPending.sceneId) {
@@ -1761,7 +1917,7 @@ export function WorldObjectsRenderer() {
             <CatalogModelErrorBoundary path={ca.imageUrl || ca.glbPath} name={ca.name}>
               <Suspense fallback={<PlaceholderBox />}>
                 {ca.imageUrl
-                  ? <ImagePlaneRenderer imageUrl={ca.imageUrl} scale={ca.scale} showFrame={ca.imageFrame} />
+                  ? <ImagePlaneRenderer imageUrl={ca.imageUrl} scale={ca.scale} frameStyle={ca.imageFrameStyle} />
                   : ca.glbPath.endsWith('.vrm')
                     ? <VRMCatalogRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />
                     : <CatalogModelRenderer path={ca.glbPath} scale={ca.scale} objectId={ca.id} displayName={ca.name} />

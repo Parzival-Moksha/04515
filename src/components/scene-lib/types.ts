@@ -24,7 +24,7 @@ export interface OasisSettings {
   // ─═̷─═̷─🪟 WINDOW OPACITY ─═̷─═̷─🪟
   streamOpacity: number  // 0.1-1.0 — ThoughtStream (stashed for Merlin)
   // ─═̷─═̷─🎮 QUAKE FPS CONTROLS ─═̷─═̷─🎮
-  controlMode: 'orbit' | 'fps' // Camera control mode
+  controlMode: 'orbit' | 'fps' | 'third-person' // Camera control mode
   mouseSensitivity: number    // FPS mouse sensitivity (0.1-2.0)
   moveSpeed: number           // FPS movement speed (1-20)
 }

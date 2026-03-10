@@ -426,6 +426,8 @@ function ImagineTab() {
   const customGroundPresets = useOasisStore(s => s.customGroundPresets)
   const enterPaintMode = useOasisStore(s => s.enterPaintMode)
   const enterPlacementMode = useOasisStore(s => s.enterPlacementMode)
+  const { pricing } = usePricing()
+  const imagineCost = pricing['imagine'] ?? 0.05
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) return
@@ -519,6 +521,9 @@ function ImagineTab() {
               }}
             >
               {inFlight.length > 0 ? `Imagine (${inFlight.length})` : 'Imagine'}
+              {imagineCost > 0 && (
+                <span className="ml-1 opacity-60 text-[9px]">{imagineCost}cr</span>
+              )}
             </button>
           </div>
           {error && (
@@ -592,7 +597,7 @@ function ImagineTab() {
                         Place
                       </button>
                       <button
-                        onClick={() => enterPlacementMode({ type: 'image', name: img.prompt.slice(0, 24), imageUrl: img.url, imageFrame: true })}
+                        onClick={() => enterPlacementMode({ type: 'image', name: img.prompt.slice(0, 24), imageUrl: img.url, imageFrameStyle: 'gilded' })}
                         className="text-[10px] px-2 py-1 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors font-mono"
                         title="Place with golden frame"
                       >

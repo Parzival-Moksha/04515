@@ -20,6 +20,7 @@ import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_STEP } from '../../lib/conjure/typ
 import type { MovementPreset, ObjectBehavior, AnimationConfig, ModelStats, VRMExpressionConfig } from '../../lib/conjure/types'
 import { formatNumber, formatBytes } from './ModelPreview'
 import { ANIMATION_LIBRARY, ANIM_CATEGORIES, LIB_PREFIX, loadAnimationClip, type AnimCategory } from '../../lib/forge/animation-library'
+import { FRAME_STYLES } from './WorldObjects'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS — The inspector's visual DNA
@@ -363,6 +364,7 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
   const worldLights = useOasisStore(s => s.worldLights)
   const updateWorldLight = useOasisStore(s => s.updateWorldLight)
   const removeWorldLight = useOasisStore(s => s.removeWorldLight)
+  const updateCatalogPlacement = useOasisStore(s => s.updateCatalogPlacement)
 
   // ─═̷─ Resolve the inspected object: who are you? ─═̷─
   const resolved = useMemo(() => {
@@ -1125,6 +1127,52 @@ export function ObjectInspector({ isOpen, onClose }: ObjectInspectorProps) {
             />
           </div>
         )}
+
+        {/* ░▒▓ FRAME PICKER — 8 frame styles for image placements ▓▒░ */}
+        {resolved?.type === 'catalog' && (resolved.data as any).imageUrl && (() => {
+          const placement = resolved.data as import('../../lib/conjure/types').CatalogPlacement
+          const currentFrame = placement.imageFrameStyle
+          return (
+            <>
+              <SectionHeader>&#128444;&#65039; Frame Style</SectionHeader>
+              <div className="rounded-lg border border-white/5 p-2" style={{ background: 'rgba(20, 20, 20, 0.6)' }}>
+                <div className="grid grid-cols-4 gap-1">
+                  {/* No frame option */}
+                  <button
+                    onClick={() => updateCatalogPlacement(inspectedObjectId!, { imageFrameStyle: undefined })}
+                    className={`flex flex-col items-center gap-0.5 p-1.5 rounded transition-colors text-center ${
+                      !currentFrame
+                        ? 'bg-fuchsia-500/20 border border-fuchsia-500/40'
+                        : 'border border-gray-700/30 hover:border-gray-500/50'
+                    }`}
+                  >
+                    <span className="text-sm">✕</span>
+                    <span className={`text-[8px] font-mono ${!currentFrame ? 'text-fuchsia-300' : 'text-gray-500'}`}>None</span>
+                  </button>
+                  {/* 8 frame styles */}
+                  {FRAME_STYLES.map(frame => {
+                    const isActive = currentFrame === frame.id
+                    return (
+                      <button
+                        key={frame.id}
+                        onClick={() => updateCatalogPlacement(inspectedObjectId!, { imageFrameStyle: frame.id })}
+                        className={`flex flex-col items-center gap-0.5 p-1.5 rounded transition-colors text-center ${
+                          isActive
+                            ? 'bg-fuchsia-500/20 border border-fuchsia-500/40'
+                            : 'border border-gray-700/30 hover:border-gray-500/50'
+                        }`}
+                        title={frame.desc}
+                      >
+                        <span className="text-sm">{frame.icon}</span>
+                        <span className={`text-[8px] font-mono ${isActive ? 'text-fuchsia-300' : 'text-gray-500'}`}>{frame.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )
+        })()}
 
         {/* ░▒▓ VRM EXPRESSIONS — Facial controls for VRM avatars ▓▒░ */}
         {resolved?.type === 'catalog' && (resolved.data as any).glbPath?.endsWith('.vrm') && (

@@ -57,8 +57,8 @@ export interface PlacementPending {
   sceneId?: string
   /** For image placements — URL to the generated image texture */
   imageUrl?: string
-  /** Place image with a golden picture frame */
-  imageFrame?: boolean
+  /** Frame style ID for image placements */
+  imageFrameStyle?: string
 }
 
 export interface ActivePlacementVfx {
@@ -157,6 +157,7 @@ interface OasisState {
   activeWorldId: string
   worldRegistry: WorldMeta[]
   _worldReady: boolean               // ░▒▓ GUARD: true after first successful load from Supabase ▓▒░
+  _loadedObjectCount: number         // ░▒▓ SANITY CHECK: object count at load time — blocks catastrophic overwrites ▓▒░
   _realtimeChannel: RealtimeChannel | null  // ░▒▓ Supabase Realtime — live Merlin updates ▓▒░
   _isReceivingRemoteUpdate: boolean  // ░▒▓ true while applying Realtime payload — prevents save loop ▓▒░
 
@@ -205,7 +206,8 @@ interface OasisState {
   enterPlacementMode: (pending: PlacementPending) => void
   cancelPlacement: () => void
   placeCatalogAssetAt: (catalogId: string, name: string, path: string, defaultScale: number, position: [number, number, number]) => void
-  placeImageAt: (name: string, imageUrl: string, position: [number, number, number], framed?: boolean) => void
+  placeImageAt: (name: string, imageUrl: string, position: [number, number, number], frameStyle?: string) => void
+  updateCatalogPlacement: (id: string, updates: Partial<import('../lib/conjure/types').CatalogPlacement>) => void
   placeLibrarySceneAt: (sceneId: string, position: [number, number, number]) => void
   setPlacementVfxType: (type: PlacementVfxType) => void
   setPlacementVfxDuration: (duration: number) => void
@@ -341,6 +343,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
   activeWorldId: isBrowser ? getActiveWorldId() : 'forge-default',
   worldRegistry: [],
   _worldReady: false,  // ░▒▓ GUARD: prevents saving empty state before world loads from Supabase ▓▒░
+  _loadedObjectCount: 0,  // ░▒▓ SANITY CHECK: set on load, checked on save — blocks catastrophic nukes ▓▒░
   _realtimeChannel: null,
   _isReceivingRemoteUpdate: false,
 
@@ -521,10 +524,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
     awardXp('PLACE_CATALOG_OBJECT', get().activeWorldId)
   },
 
-  placeImageAt: (name, imageUrl, position, framed) => {
+  placeImageAt: (name, imageUrl, position, frameStyle) => {
     withUndo(`Place ${name}`, '🖼️', () => {
       const id = `image-${Date.now()}`
-      const placement: CatalogPlacement = { id, catalogId: 'generated-image', name, glbPath: '', position, scale: 1, imageUrl, ...(framed && { imageFrame: true }) }
+      const placement: CatalogPlacement = { id, catalogId: 'generated-image', name, glbPath: '', position, scale: 1, imageUrl, ...(frameStyle && { imageFrameStyle: frameStyle }) }
       set(state => ({
         placedCatalogAssets: [...state.placedCatalogAssets, placement],
         placementPending: null,
@@ -533,6 +536,15 @@ export const useOasisStore = create<OasisState>((set, get) => {
     get().spawnPlacementVfx(position)
     setTimeout(() => get().saveWorldState(), 100)
     awardXp('PLACE_CATALOG_OBJECT', get().activeWorldId)
+  },
+
+  updateCatalogPlacement: (id, updates) => {
+    set(state => ({
+      placedCatalogAssets: state.placedCatalogAssets.map(ca =>
+        ca.id === id ? { ...ca, ...updates } : ca
+      ),
+    }))
+    setTimeout(() => get().saveWorldState(), 100)
   },
 
   placeLibrarySceneAt: (sceneId, position) => {
@@ -809,7 +821,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
     loadWorld().then(world => {
       if (get().isViewMode) return // check again after async — view mode may have been entered during fetch
       if (!world) {
-        set({ _worldReady: true, terrainParams: null, groundPresetId: 'none', groundTiles: {}, craftedScenes: [], worldConjuredAssetIds: [], placedCatalogAssets: [], transforms: {}, behaviors: {}, worldLights: seedDefaultLights(), worldSkyBackground: 'night007' })
+        set({ _worldReady: true, _loadedObjectCount: 0, terrainParams: null, groundPresetId: 'none', groundTiles: {}, craftedScenes: [], worldConjuredAssetIds: [], placedCatalogAssets: [], transforms: {}, behaviors: {}, worldLights: seedDefaultLights(), worldSkyBackground: 'night007' })
         console.log('[World] No data — initialized empty world')
         return
       }
@@ -821,8 +833,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
       const newCustom = (world.customGroundPresets || []).filter((p: import('../lib/forge/ground-textures').GroundPreset) => !existingCustomIds.has(p.id))
       const mergedCustom = [...get().customGroundPresets, ...newCustom]
       if (newCustom.length > 0) persist('oasis-custom-ground', JSON.stringify(mergedCustom))
+      const loadedObjCount = (world.conjuredAssetIds?.length || 0) + (world.catalogPlacements?.length || 0) + (world.craftedScenes?.length || 0)
       set({
         _worldReady: true,
+        _loadedObjectCount: loadedObjCount,
         terrainParams: world.terrain || null,
         groundPresetId: world.groundPresetId || 'none',
         groundTiles: world.groundTiles || {},
@@ -835,7 +849,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
         worldSkyBackground: world.skyBackgroundId || 'night007',
         customGroundPresets: mergedCustom,
       })
-      console.log('[World] Loaded:', world.savedAt, '| preset:', world.groundPresetId || 'none', '| tiles:', Object.keys(world.groundTiles || {}).length, '| catalog:', world.catalogPlacements?.length || 0, '| lights:', lights.length, '| sky:', world.skyBackgroundId || 'night007')
+      console.log('[World] Loaded:', world.savedAt, '| objects:', loadedObjCount, '| preset:', world.groundPresetId || 'none', '| tiles:', Object.keys(world.groundTiles || {}).length, '| catalog:', world.catalogPlacements?.length || 0, '| lights:', lights.length, '| sky:', world.skyBackgroundId || 'night007')
     })
 
     // ░▒▓ REALTIME — subscribe to Merlin/remote updates for the active world ▓▒░
@@ -885,7 +899,16 @@ export const useOasisStore = create<OasisState>((set, get) => {
       console.warn('[World] ⚠️ Save blocked — world not loaded yet (preventing empty-state overwrite)')
       return
     }
-    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, viewingWorldId, customGroundPresets } = get()
+    const { terrainParams, groundPresetId, groundTiles, craftedScenes, worldConjuredAssetIds, placedCatalogAssets, transforms, behaviors, worldLights, worldSkyBackground, viewingWorldId, customGroundPresets, _loadedObjectCount } = get()
+
+    // ░▒▓ SANITY CHECK: block saves that would catastrophically reduce object count ▓▒░
+    // If we loaded 5+ objects and now have 0, something is wrong (stale tab, empty init, etc.)
+    const currentObjCount = (worldConjuredAssetIds?.length || 0) + (placedCatalogAssets?.length || 0) + (craftedScenes?.length || 0)
+    if (_loadedObjectCount >= 5 && currentObjCount === 0) {
+      console.error(`[World] 🚨 NUKE BLOCKED — loaded ${_loadedObjectCount} objects but trying to save 0. This is the anorak2 protection.`)
+      return
+    }
+
     // Only include customGroundPresets in save if any tiles reference them
     const usedCustomIds = new Set(Object.values(groundTiles).filter(id => id.startsWith('custom_')))
     const relevantCustom = customGroundPresets.filter(p => usedCustomIds.has(p.id))
@@ -930,8 +953,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
       // Seed defaults for old worlds that never had lights (lights field undefined)
       const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
       const lights = world?.lights !== undefined ? (world?.lights || []) : defaultLights
+      const switchObjCount = (world?.conjuredAssetIds?.length || 0) + (world?.catalogPlacements?.length || 0) + (world?.craftedScenes?.length || 0)
       set({
         _worldReady: true,
+        _loadedObjectCount: switchObjCount,
         activeWorldId: worldId,
         terrainParams: world?.terrain || null,
         groundPresetId: world?.groundPresetId || 'none',
@@ -1004,6 +1029,7 @@ export const useOasisStore = create<OasisState>((set, get) => {
       return getWorldRegistry().then(registry => {
         set({
           _worldReady: true,  // New world is "loaded" — it's empty by definition
+          _loadedObjectCount: 0,
           activeWorldId: meta.id,
           worldRegistry: registry,
           terrainParams: null,
@@ -1108,8 +1134,10 @@ export const useOasisStore = create<OasisState>((set, get) => {
       const isEditable = meta.visibility === 'public_edit'
       const defaultLights: WorldLight[] = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
       const lights = state.lights !== undefined ? state.lights : defaultLights
+      const viewObjCount = (state.conjuredAssetIds?.length || 0) + (state.catalogPlacements?.length || 0) + (state.craftedScenes?.length || 0)
       set({
         _worldReady: isEditable, // Allow saves for public_edit worlds
+        _loadedObjectCount: viewObjCount,
         isViewModeEditable: isEditable,
         viewingWorldMeta: { name: meta.name, icon: meta.icon, creator_name: meta.creator_name, creator_avatar: meta.creator_avatar, visibility: meta.visibility },
         terrainParams: state.terrain || null,

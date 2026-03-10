@@ -35,8 +35,11 @@ export interface LocalAnimation {
 
 export const ANIMATION_LIBRARY: LocalAnimation[] = [
   // ░▒▓ Locomotion ▓▒░
+  { id: 'idle',        filename: 'Breathing Idle.fbx',               label: 'Idle',          category: 'locomotion' },
   { id: 'walk',        filename: 'Unarmed Walk Forward.fbx',        label: 'Walk',       category: 'locomotion' },
-  { id: 'idle-fight',  filename: 'Standing Idle To Fight Idle.fbx',  label: 'Idle',       category: 'locomotion' },
+  { id: 'run',         filename: 'Medium Run.fbx',                  label: 'Run',           category: 'locomotion' },
+  { id: 'sprint',      filename: 'Running.fbx',                     label: 'Sprint',        category: 'locomotion' },
+  { id: 'idle-fight',  filename: 'Standing Idle To Fight Idle.fbx',  label: 'Fight Idle',       category: 'locomotion' },
   { id: 'drunk-walk',  filename: 'Drunk Walk.fbx',                  label: 'Drunk Walk', category: 'locomotion' },
   { id: 'catwalk',     filename: 'Catwalk Walk Turn 180 Tight.fbx', label: 'Catwalk',    category: 'locomotion' },
   { id: 'low-crawl',   filename: 'Low Crawl.fbx',                   label: 'Low Crawl',  category: 'locomotion' },
@@ -495,6 +498,126 @@ export async function loadAnimationClip(animId: string): Promise<THREE.Animation
       return clip
     } catch (err) {
       console.error(`[AnimLib] Failed to load ${animId}:`, err)
+      return null
+    } finally {
+      loadingPromises.delete(animId)
+    }
+  })()
+
+  loadingPromises.set(animId, promise)
+  return promise
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GLTF CLIP EXTRACTION — Steal animations from character GLTFs for VRM avatars
+// ░▒▓ Character GLTFs (Leela, Mike, etc.) have proper looping Idle/Walk clips ▓▒░
+// ░▒▓ Way better quality than Mixamo FBX transition clips (no snap, clean loops) ▓▒░
+// Same retargeting pipeline — rest-pose compensation works identically.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Load an animation clip from a character GLTF file (not FBX).
+ * Extracts the named clip + skeleton rest rotations → caches both.
+ * Track names normalized same as FBX pipeline → compatible with retargetClipForVRM.
+ */
+export async function loadClipFromGLTF(
+  gltfPath: string,
+  clipPattern: RegExp,
+  animId: string,
+): Promise<THREE.AnimationClip | null> {
+  if (clipCache.has(animId)) return clipCache.get(animId)!
+  if (loadingPromises.has(animId)) return loadingPromises.get(animId)!
+
+  const promise = (async () => {
+    try {
+      const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
+      const loader = new GLTFLoader()
+
+      const url = `${OASIS_BASE}${gltfPath}`
+      console.log(`[AnimLib:GLTF] Loading /${clipPattern.source}/ from ${url}`)
+
+      const gltf = await new Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>((resolve, reject) => {
+        loader.load(url, resolve as any, undefined, reject)
+      })
+
+      if (!gltf.animations || gltf.animations.length === 0) {
+        console.warn(`[AnimLib:GLTF] ${gltfPath} has no animations`)
+        return null
+      }
+
+      // Find clip matching pattern
+      const rawClip = gltf.animations.find(a => clipPattern.test(a.name))
+      if (!rawClip) {
+        console.warn(`[AnimLib:GLTF] No clip matching /${clipPattern.source}/ in ${gltfPath}. Available:`, gltf.animations.map(a => a.name))
+        return null
+      }
+
+      // ░▒▓ Extract rest rotations from GLTF skeleton — same formula as FBX pipeline ▓▒░
+      const restRotations = new Map<string, THREE.Quaternion>()
+      gltf.scene.traverse((child) => {
+        if ((child as THREE.Bone).isBone) {
+          let name = child.name
+          if (name.includes('|')) name = name.split('|').pop()!
+          name = name.replace(/:/g, '')
+          restRotations.set(name, child.quaternion.clone())
+        }
+      })
+      if (restRotations.size > 0) {
+        mixamoRestCache.set(animId, restRotations)
+        console.log(`[AnimLib:GLTF] ${animId}: ${restRotations.size} rest rotations from ${gltfPath}`)
+      }
+
+      // Log first 5 bone names + first 3 track names for debugging
+      const boneNames = [...restRotations.keys()].slice(0, 5)
+      const trackSample = rawClip.tracks.slice(0, 3).map(t => t.name)
+      console.log(`[AnimLib:GLTF] ${animId} bones (first 5):`, boneNames)
+      console.log(`[AnimLib:GLTF] ${animId} tracks (first 3):`, trackSample)
+
+      // Normalize tracks — same pipeline as FBX: strip prefixes, remove colons, kill root position
+      const normalizedTracks: THREE.KeyframeTrack[] = []
+      for (const track of rawClip.tracks) {
+        const dotIdx = track.name.indexOf('.')
+        if (dotIdx === -1) { normalizedTracks.push(track.clone()); continue }
+
+        let boneName = track.name.substring(0, dotIdx)
+        const property = track.name.substring(dotIdx)
+
+        if (boneName.includes('|')) boneName = boneName.split('|').pop()!
+        boneName = boneName.replace(/:/g, '')
+
+        // Strip root position — prevents teleporting (same as FBX pipeline)
+        if ((boneName === 'Hips' || boneName === 'mixamorigHips') && property === '.position') {
+          continue
+        }
+
+        const newTrack = track.clone()
+        newTrack.name = boneName + property
+        normalizedTracks.push(newTrack)
+      }
+
+      const clip = new THREE.AnimationClip(
+        `${LIB_PREFIX}${animId}`,
+        rawClip.duration,
+        normalizedTracks,
+      )
+
+      clipCache.set(animId, clip)
+      console.log(`[AnimLib:GLTF] ${animId} loaded: "${rawClip.name}" ${clip.duration.toFixed(1)}s, ${normalizedTracks.length} tracks`)
+
+      // Dispose GLTF scene — we only needed clips + rest rotations
+      gltf.scene.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh
+          mesh.geometry?.dispose()
+          const mat = mesh.material
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose())
+          else if (mat) (mat as THREE.Material).dispose()
+        }
+      })
+
+      return clip
+    } catch (err) {
+      console.error(`[AnimLib:GLTF] Failed to load from ${gltfPath}:`, err)
       return null
     } finally {
       loadingPromises.delete(animId)

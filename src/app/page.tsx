@@ -6,8 +6,9 @@
 // ─═̷─═̷─ॐ─═̷─═̷─ Where consciousness renders itself ─═̷─═̷─ॐ─═̷─═̷─
 // ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import { useSession } from 'next-auth/react'
 import { RealmSelector } from '@/components/realms/RealmSelector'
 import { useOasisStore } from '@/store/oasisStore'
 // View mode banner removed — user exits via world selector dropdown
@@ -19,11 +20,20 @@ const Scene = dynamic(() => import('@/components/Scene'), {
 })
 
 export default function OasisPage() {
+  const { data: session, status } = useSession()
   const switchWorld = useOasisStore(s => s.switchWorld)
   const enterViewMode = useOasisStore(s => s.enterViewMode)
+  const routeHandled = useRef(false)
 
   // Handle ?world=xxx (switch to own world) and ?view=xxx (view public world)
+  // Guarded by ref: runs exactly once after session resolves.
+  // Without this, enterViewMode → Zustand re-render → effect re-fires with
+  // URL already stripped → falls into !session → redirects to /explore.
   useEffect(() => {
+    if (status === 'loading') return
+    if (routeHandled.current) return
+    routeHandled.current = true
+
     const params = new URLSearchParams(window.location.search)
     const worldParam = params.get('world')
     const viewParam = params.get('view')
@@ -31,21 +41,24 @@ export default function OasisPage() {
     if (viewParam) {
       enterViewMode(viewParam)
       window.history.replaceState({}, '', window.location.pathname)
-    } else if (worldParam) {
+    } else if (worldParam && session) {
       const registry = useOasisStore.getState().worldRegistry
       if (registry.some(w => w.id === worldParam)) {
         switchWorld(worldParam)
       }
       window.history.replaceState({}, '', window.location.pathname)
+    } else if (!session) {
+      // Anonymous user without ?view= param — redirect to explore
+      window.location.href = '/explore'
     } else {
-      // First visit ever? Show the showcase world
+      // Authenticated user, no params — first visit?
       const hasVisited = localStorage.getItem('oasis-has-visited')
       if (!hasVisited) {
         localStorage.setItem('oasis-has-visited', '1')
         enterViewMode('world-1772594968383-6r20') // "Ready Player One" showcase
       }
     }
-  }, [switchWorld, enterViewMode])
+  }, [switchWorld, enterViewMode, session, status])
 
   return (
     <main className="w-full h-screen bg-black">

@@ -25,33 +25,10 @@ const LB_API_BASE = typeof window !== 'undefined'
   ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/leaderboard`
   : '/api/leaderboard'
 
-const PROFILE_API = typeof window !== 'undefined'
-  ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/profile`
-  : '/api/profile'
-
 function getInitialTab(): PageTab {
   if (typeof window === 'undefined') return 'worlds'
   const params = new URLSearchParams(window.location.search)
   return params.get('tab') === 'leaderboard' ? 'leaderboard' : 'worlds'
-}
-
-// ─═̷─ Profile badge — fetches real display_name from Supabase, not stale OAuth name ─═̷─
-function ProfileHeaderBadge() {
-  const [profile, setProfile] = useState<{ displayName: string; avatar_url: string | null } | null>(null)
-  useEffect(() => {
-    fetch(PROFILE_API).then(r => r.ok ? r.json() : null).then(d => {
-      if (d) setProfile({ displayName: d.displayName, avatar_url: d.avatar_url })
-    }).catch(() => {})
-  }, [])
-  if (!profile) return null
-  return (
-    <div className="flex items-center gap-2 text-sm text-gray-400">
-      {profile.avatar_url && (
-        <img src={profile.avatar_url} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-      )}
-      <span className="hidden sm:inline">{profile.displayName}</span>
-    </div>
-  )
 }
 
 export default function ExplorePage() {
@@ -74,22 +51,25 @@ export default function ExplorePage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            {session?.user ? (
-              <ProfileHeaderBadge />
-            ) : (
+            {!session?.user ? (
               <button
                 onClick={() => router.push('/login')}
-                className="px-3 py-1.5 text-sm text-purple-400 border border-purple-500/30 rounded hover:bg-purple-600/20 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white rounded transition-all hover:scale-105"
+                style={{
+                  background: 'linear-gradient(135deg, #7C3AED, #A855F7)',
+                  boxShadow: '0 0 15px rgba(168,85,247,0.3)',
+                }}
               >
-                Sign In
+                Sign Up to Build
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push('/')}
+                className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
+              >
+                Enter the Oasis
               </button>
             )}
-            <button
-              onClick={() => router.push('/')}
-              className="px-4 py-2 text-sm border border-gray-700 rounded hover:bg-gray-900 transition-colors"
-            >
-              Enter the Oasis
-            </button>
           </div>
         </div>
       </header>

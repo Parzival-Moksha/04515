@@ -10,6 +10,7 @@ import { OrbitControls, PointerLockControls, KeyboardControls, useKeyboardContro
 import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { Suspense, useState, useRef, useContext, useEffect, useCallback, useTransition } from 'react'
+import { useSession } from 'next-auth/react'
 import * as THREE from 'three'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -42,7 +43,9 @@ import { ProfileButton } from './forge/ProfileButton'
 import { OnboardingModal } from './forge/OnboardingModal'
 import { ChatPanel } from './forge/ChatPanel'
 import { FeedbackPanel } from './forge/FeedbackPanel'
+import { HelpPanel } from './forge/HelpPanel'
 import { useWorldLoader } from './forge/WorldObjects'
+import { completeQuest } from '@/lib/quests'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─═̷─═̷─🎮─═̷─═̷─{ QUAKE FPS CONTROLS - WASD + Q/E }─═̷─═̷─🎮─═̷─═̷─
@@ -354,11 +357,12 @@ function SettingsContent() {
         <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-2">Camera Controls</div>
         <select
           value={settings.controlMode}
-          onChange={(e) => updateSetting('controlMode', e.target.value as 'orbit' | 'fps')}
+          onChange={(e) => updateSetting('controlMode', e.target.value as 'orbit' | 'fps' | 'third-person')}
           className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-300 hover:border-purple-500 focus:border-purple-500 focus:outline-none transition-colors mb-2"
         >
           <option value="orbit">Orbit (Classic)</option>
           <option value="fps">FPS (Quake-style)</option>
+          <option value="third-person">Third Person (Avatar)</option>
         </select>
 
         {settings.controlMode === 'orbit' && (
@@ -373,7 +377,7 @@ function SettingsContent() {
           </label>
         )}
 
-        {settings.controlMode === 'fps' && (
+        {(settings.controlMode === 'fps' || settings.controlMode === 'third-person') && (
           <>
             <div className="py-1.5">
               <div className="flex items-center justify-between mb-2">
@@ -408,7 +412,9 @@ function SettingsContent() {
             </div>
 
             <div className="text-[10px] text-gray-500 mt-2">
-              Click canvas to lock pointer · WASD to move · Q/E up/down · ESC to unlock
+              {settings.controlMode === 'fps'
+                ? 'Click canvas to lock pointer · WASD to move · Q/E up/down · ESC to unlock'
+                : 'Click canvas to lock pointer · WASD to move avatar · Mouse to orbit camera · ESC to unlock'}
             </div>
           </>
         )}
@@ -677,11 +683,48 @@ function FPSDisplay({ enabled, fontSize }: { enabled: boolean; fontSize: number 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// QUEST TRACKER — subscribes to store, auto-completes onboarding quests
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function useQuestTracker() {
+  useEffect(() => {
+    const unsub = useOasisStore.subscribe((state, prev) => {
+      // Quest: Place an object
+      if (state.placedCatalogAssets.length > prev.placedCatalogAssets.length) {
+        completeQuest('place-object')
+      }
+      // Quest: Select & inspect an object
+      if (state.inspectedObjectId && !prev.inspectedObjectId) {
+        completeQuest('select-object')
+      }
+      // Quest: Add a light
+      if (state.worldLights.length > prev.worldLights.length) {
+        completeQuest('add-light')
+      }
+      // Quest: Change sky background
+      if (state.worldSkyBackground !== prev.worldSkyBackground && prev.worldSkyBackground) {
+        completeQuest('set-sky')
+      }
+      // Quest: Change ground preset
+      if (state.groundPresetId !== prev.groundPresetId && prev.groundPresetId !== undefined) {
+        completeQuest('set-ground')
+      }
+    })
+    return unsub
+  }, [])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN SCENE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function Scene() {
+  const { data: session } = useSession()
+  const isAnonymous = !session
   const [isDragging, setIsDragging] = useState(false)
+
+  // ─═̷─═̷─⚔️─═̷─═̷─{ QUEST TRACKER — auto-detect onboarding actions }─═̷─═̷─⚔️─═̷─═̷─
+  useQuestTracker()
 
   // ─═̷─═̷─💾─═̷─═̷─{ SETTINGS PERSISTENCE }─═̷─═̷─💾─═̷─═̷─
   const [settings, setSettings] = useState<OasisSettings>(() => {
@@ -718,7 +761,8 @@ export default function Scene() {
   const isViewMode = useOasisStore(s => s.isViewMode)
   const isViewModeEditable = useOasisStore(s => s.isViewModeEditable)
   // Hide editing tools when viewing read-only worlds (but show for public_edit)
-  const hideEditTools = isViewMode && !isViewModeEditable
+  // Anonymous users NEVER get edit tools, even on public_edit worlds
+  const hideEditTools = isAnonymous || (isViewMode && !isViewModeEditable)
 
   // ─═̷─═̷─✨─═̷─═̷─{ WIZARD CONSOLE + ASSET EXPLORER STATE }─═̷─═̷─✨─═̷─═̷─
   const [wizardOpen, setWizardOpen] = useState(true)
@@ -726,25 +770,28 @@ export default function Scene() {
   const [actionLogOpen, setActionLogOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const orbitControlsRef = useRef<any>(null)
 
   const updateSetting = <K extends keyof OasisSettings>(key: K, value: OasisSettings[K]) => {
-    // Auto-exit pointer lock when switching to orbit mode
+    // Auto-exit pointer lock when switching to orbit mode (from fps or third-person)
     if (key === 'controlMode' && value === 'orbit' && document.pointerLockElement) {
       document.exitPointerLock()
     }
     setSettings(prev => ({ ...prev, [key]: value }))
   }
 
-  // ─═̷─═̷─🎮─═̷─═̷─{ CAMERA MODE HOTKEY: Ctrl+Alt+C }─═̷─═̷─🎮─═̷─═̷─
+  // ─═̷─═̷─🎮─═̷─═̷─{ CAMERA MODE HOTKEY: Ctrl+Alt+C cycles orbit→fps→third-person }─═̷─═̷─🎮─═̷─═̷─
   useEffect(() => {
+    const MODES: Array<'orbit' | 'fps' | 'third-person'> = ['orbit', 'fps', 'third-person']
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && e.code === 'KeyC') {
         e.preventDefault()
         setSettings(prev => {
-          const next = prev.controlMode === 'orbit' ? 'fps' : 'orbit'
-          // Auto-exit pointer lock when switching to orbit — no right-click needed
+          const idx = MODES.indexOf(prev.controlMode)
+          const next = MODES[(idx + 1) % MODES.length]
+          // Auto-exit pointer lock when switching away from fps/third-person
           if (next === 'orbit' && document.pointerLockElement) {
             document.exitPointerLock()
           }
@@ -799,7 +846,8 @@ export default function Scene() {
         <SkyBackground backgroundId={worldSkyBackground} />
 
         {/* ─═̷─═̷─🎮─═̷─═̷─ CAMERA CONTROLS ─═̷─═̷─🎮─═̷─═̷─ */}
-        {settings.controlMode === 'orbit' ? (
+        {/* orbit: OrbitControls. fps: PointerLock + WASD. third-person: PlayerAvatar handles camera */}
+        {settings.controlMode === 'orbit' && (
           <>
             <OrbitControls
               ref={orbitControlsRef}
@@ -813,7 +861,8 @@ export default function Scene() {
             {settings.showOrbitTarget && <OrbitTargetSphere controlsRef={orbitControlsRef} />}
             <CameraLerp controlsRef={orbitControlsRef} />
           </>
-        ) : (
+        )}
+        {settings.controlMode === 'fps' && (
           <>
             <PointerLockControls
               selector="#uploader-canvas"
@@ -823,6 +872,7 @@ export default function Scene() {
             <SprintParticles />
           </>
         )}
+        {/* third-person: camera is driven by PlayerAvatar in ForgeRealm — no controls needed here */}
 
         <Grid
           position={[0, 0, 0]}
@@ -874,13 +924,18 @@ export default function Scene() {
 
       {/* ─═̷─═̷─🔮─═̷─═̷─ TOP-LEFT BUTTON BAR — Profile, Settings, Wizard, Action Log ─═̷─═̷─🔮─═̷─═̷─ */}
       <div className="fixed top-4 left-4 z-[200] flex items-start gap-2">
-        <ProfileButton />
+        {!isAnonymous && <ProfileButton />}
         <SettingsGear>
           <SettingsContent />
         </SettingsGear>
         {!hideEditTools && (
           <button
-            onClick={() => setWizardOpen(prev => !prev)}
+            onClick={() => {
+              setWizardOpen(prev => {
+                if (!prev) completeQuest('open-wizard')
+                return !prev
+              })
+            }}
             className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
             style={{
               background: wizardOpen ? 'rgba(249,115,22,0.4)' : 'rgba(0,0,0,0.6)',
@@ -899,31 +954,48 @@ export default function Scene() {
             isOpen={actionLogOpen}
           />
         )}
+        {!isAnonymous && (
+          <button
+            onClick={() => setChatOpen(prev => !prev)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+            style={{
+              background: chatOpen ? 'rgba(56,189,248,0.3)' : 'rgba(0,0,0,0.6)',
+              border: `1px solid ${chatOpen ? 'rgba(56,189,248,0.6)' : 'rgba(255,255,255,0.15)'}`,
+              color: chatOpen ? '#38BDF8' : '#aaa',
+              boxShadow: chatOpen ? '0 0 12px rgba(56,189,248,0.3)' : 'none',
+            }}
+            title="World Chat"
+          >
+            💬
+          </button>
+        )}
+        {!isAnonymous && (
+          <button
+            onClick={() => setFeedbackOpen(prev => !prev)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+            style={{
+              background: feedbackOpen ? 'rgba(249,115,22,0.3)' : 'rgba(0,0,0,0.6)',
+              border: `1px solid ${feedbackOpen ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.15)'}`,
+              color: feedbackOpen ? '#F97316' : '#aaa',
+              boxShadow: feedbackOpen ? '0 0 12px rgba(249,115,22,0.3)' : 'none',
+            }}
+            title="Anorak — Bug Reports & Feature Requests"
+          >
+            🔮
+          </button>
+        )}
         <button
-          onClick={() => setChatOpen(prev => !prev)}
+          onClick={() => setHelpOpen(prev => !prev)}
           className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
           style={{
-            background: chatOpen ? 'rgba(56,189,248,0.3)' : 'rgba(0,0,0,0.6)',
-            border: `1px solid ${chatOpen ? 'rgba(56,189,248,0.6)' : 'rgba(255,255,255,0.15)'}`,
-            color: chatOpen ? '#38BDF8' : '#aaa',
-            boxShadow: chatOpen ? '0 0 12px rgba(56,189,248,0.3)' : 'none',
+            background: helpOpen ? 'rgba(168,85,247,0.3)' : 'rgba(0,0,0,0.6)',
+            border: `1px solid ${helpOpen ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.15)'}`,
+            color: helpOpen ? '#A855F7' : '#aaa',
+            boxShadow: helpOpen ? '0 0 12px rgba(168,85,247,0.3)' : 'none',
           }}
-          title="World Chat"
+          title="Help — Controls, Guide & Glossary"
         >
-          💬
-        </button>
-        <button
-          onClick={() => setFeedbackOpen(prev => !prev)}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
-          style={{
-            background: feedbackOpen ? 'rgba(249,115,22,0.3)' : 'rgba(0,0,0,0.6)',
-            border: `1px solid ${feedbackOpen ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.15)'}`,
-            color: feedbackOpen ? '#F97316' : '#aaa',
-            boxShadow: feedbackOpen ? '0 0 12px rgba(249,115,22,0.3)' : 'none',
-          }}
-          title="Anorak — Bug Reports & Feature Requests"
-        >
-          🔮
+          ❓
         </button>
       </div>
 
@@ -949,25 +1021,89 @@ export default function Scene() {
         onClose={() => setActionLogOpen(false)}
       />
 
-      {/* 💬 World Chat */}
-      <ChatPanel
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-      />
+      {/* 💬 World Chat — requires auth */}
+      {!isAnonymous && (
+        <ChatPanel
+          isOpen={chatOpen}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
 
-      {/* 🔮 Anorak — Feedback Portal */}
-      <FeedbackPanel
-        isOpen={feedbackOpen}
-        onClose={() => setFeedbackOpen(false)}
+      {/* 🔮 Anorak — Feedback Portal — requires auth */}
+      {!isAnonymous && (
+        <FeedbackPanel
+          isOpen={feedbackOpen}
+          onClose={() => setFeedbackOpen(false)}
+        />
+      )}
+
+      {/* ❓ Help Panel — Controls, Guide, Glossary */}
+      <HelpPanel
+        isOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
       />
 
       {/* ░▒▓ LOADING OVERLAY ▓▒░ */}
       <OasisLoader />
 
-      {/* ░▒▓ ONBOARDING — first-login identity setup ▓▒░ */}
-      <OnboardingModal />
+      {/* ░▒▓ ONBOARDING — first-login identity setup (requires auth) ▓▒░ */}
+      {!isAnonymous && <OnboardingModal />}
+
+      {/* ░▒▓ ANONYMOUS CTA — conversion hook ▓▒░ */}
+      {isAnonymous && isViewMode && <AnonymousCTA />}
     </DragContext.Provider>
     </SettingsContext.Provider>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANONYMOUS CTA — "Sign up to build your own world" conversion banner
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AnonymousCTA() {
+  const [dismissed, setDismissed] = useState(false)
+  const viewingWorldMeta = useOasisStore(s => s.viewingWorldMeta)
+
+  if (dismissed) return null
+
+  return (
+    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-bottom-4 duration-700">
+      <div
+        className="flex items-center gap-4 px-6 py-3.5 rounded-2xl shadow-2xl"
+        style={{
+          background: 'rgba(8, 8, 20, 0.9)',
+          border: '1px solid rgba(168, 85, 247, 0.3)',
+          boxShadow: '0 0 40px rgba(0,0,0,0.5), 0 0 20px rgba(168, 85, 247, 0.15)',
+          backdropFilter: 'blur(16px)',
+        }}
+      >
+        <div className="flex flex-col">
+          <span className="text-sm text-gray-200 font-medium">
+            {viewingWorldMeta?.name ? `You're exploring "${viewingWorldMeta.name}"` : "You're exploring the Oasis"}
+          </span>
+          <span className="text-xs text-gray-500">
+            Sign up free to build your own 3D world
+          </span>
+        </div>
+        <a
+          href="/login"
+          className="px-5 py-2 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-lg flex-shrink-0"
+          style={{
+            background: 'linear-gradient(135deg, #7C3AED, #A855F7)',
+            boxShadow: '0 0 20px rgba(168, 85, 247, 0.4)',
+          }}
+        >
+          Start Building
+        </a>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-gray-600 hover:text-gray-400 transition-colors text-xs ml-1"
+          title="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
   )
 }
 

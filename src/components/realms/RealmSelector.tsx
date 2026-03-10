@@ -9,6 +9,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useOasisStore } from '../../store/oasisStore'
 import type { WorldVisibility } from '@/lib/xp'
+import { completeQuest } from '@/lib/quests'
+
+interface SnapshotMeta {
+  id: string
+  world_id: string
+  object_count: number
+  source: 'auto' | 'manual'
+  created_at: string
+}
 
 const WORLD_ICONS = ['🌍', '🌋', '🏔️', '🌊', '🏜️', '🌌', '🪐', '🌙', '🏰', '⛩️']
 const VISIBILITY_OPTIONS: { value: WorldVisibility; icon: string; label: string; desc: string }[] = [
@@ -55,6 +64,48 @@ export function RealmSelector() {
   // Which world has its visibility dropdown open
   const [visDropdownId, setVisDropdownId] = useState<string | null>(null)
 
+  // ░▒▓ SNAPSHOTS — time travel UI ▓▒░
+  const [snapshotWorldId, setSnapshotWorldId] = useState<string | null>(null)
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([])
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+
+  const loadSnapshots = useCallback(async (worldId: string) => {
+    setSnapshotsLoading(true)
+    try {
+      const res = await fetch(`/api/worlds/${worldId}/snapshots`)
+      if (res.ok) setSnapshots(await res.json())
+    } catch { /* silent */ }
+    setSnapshotsLoading(false)
+  }, [])
+
+  const restoreSnapshot = useCallback(async (worldId: string, snapshotId: string) => {
+    setRestoringId(snapshotId)
+    try {
+      const res = await fetch(`/api/worlds/${worldId}/snapshots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshotId }),
+      })
+      if (res.ok) {
+        // Reload the world to pick up restored state
+        if (worldId === activeWorldId) {
+          switchWorld(worldId) // re-loads the world state
+        }
+        setSnapshotWorldId(null)
+        setExpanded(false)
+      }
+    } catch { /* silent */ }
+    setRestoringId(null)
+  }, [activeWorldId, switchWorld])
+
+  const createManualSnapshot = useCallback(async (worldId: string) => {
+    try {
+      await fetch(`/api/worlds/${worldId}/snapshots`, { method: 'PUT' })
+      loadSnapshots(worldId)
+    } catch { /* silent */ }
+  }, [loadSnapshots])
+
   const setVisibility = useCallback(async (worldId: string, next: WorldVisibility) => {
     const current = visibilityMap[worldId] || 'private'
     setVisDropdownId(null)
@@ -67,6 +118,10 @@ export function RealmSelector() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visibility: next }),
       })
+      // Quest: share world (any public visibility counts)
+      if (next === 'public' || next === 'public_edit' || next === 'unlisted') {
+        completeQuest('share-world')
+      }
     } catch {
       // Revert on failure
       setVisibilityMap(prev => ({ ...prev, [worldId]: current }))
@@ -221,7 +276,8 @@ export function RealmSelector() {
             const isActive = activeWorldId === world.id
             const isRenaming = renamingId === world.id
             return (
-              <div key={world.id} className="group flex items-center">
+              <div key={world.id}>
+              <div className="group flex items-center">
                 {isRenaming ? (
                   <div className="flex-1 flex items-center gap-2 px-4 py-2">
                     <span className="text-lg">{world.icon}</span>
@@ -266,6 +322,22 @@ export function RealmSelector() {
                   title="Rename world"
                 >
                   ✏️
+                </button>
+                {/* Snapshots / Time Travel button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (snapshotWorldId === world.id) {
+                      setSnapshotWorldId(null)
+                    } else {
+                      setSnapshotWorldId(world.id)
+                      loadSnapshots(world.id)
+                    }
+                  }}
+                  className={`px-1.5 py-1 text-xs transition-opacity ${snapshotWorldId === world.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-70 hover:!opacity-100'}`}
+                  title="Snapshots — restore previous versions"
+                >
+                  ⏪
                 </button>
                 {/* Visibility dropdown */}
                 <div className="relative">
@@ -319,6 +391,56 @@ export function RealmSelector() {
                     ✕
                   </button>
                 )}
+              </div>
+              {/* ─═̷─ Snapshot panel (inline, below this world row) ─═̷─ */}
+              {snapshotWorldId === world.id && (
+                <div
+                  className="mx-3 mb-2 rounded-lg overflow-hidden"
+                  style={{ background: 'rgba(30,20,50,0.9)', border: '1px solid rgba(168,85,247,0.2)' }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-purple-500/10">
+                    <span className="text-[10px] text-purple-400 uppercase tracking-wider">Snapshots</span>
+                    <button
+                      onClick={() => createManualSnapshot(world.id)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-purple-600/20 text-purple-300 hover:bg-purple-600/40 transition-colors"
+                    >
+                      + Save Now
+                    </button>
+                  </div>
+                  {snapshotsLoading ? (
+                    <div className="px-3 py-4 text-center text-xs text-gray-600">Loading...</div>
+                  ) : snapshots.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-gray-600">No snapshots yet — they are created automatically on each save</div>
+                  ) : (
+                    <div className="max-h-[200px] overflow-y-auto">
+                      {snapshots.map(snap => (
+                        <div
+                          key={snap.id}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-purple-500/10 transition-colors border-b border-white/[0.03]"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-gray-300">
+                              {new Date(snap.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="text-[10px] text-gray-600">
+                              {snap.object_count} objects · {snap.source === 'manual' ? '📸 manual' : 'auto'}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => restoreSnapshot(world.id, snap.id)}
+                            disabled={restoringId === snap.id}
+                            className="text-[10px] px-2 py-1 rounded font-medium transition-all disabled:opacity-50"
+                            style={{ background: 'rgba(249,115,22,0.2)', color: '#F97316' }}
+                          >
+                            {restoringId === snap.id ? '...' : 'Restore'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
             )
           })}

@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useRef, useCallback, Suspense } from 'react'
+import { useRef, useCallback, useContext, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -16,7 +16,8 @@ import { GroundPlane } from '../forge/GroundPlane'
 import { WorldObjectsRenderer } from '../forge/WorldObjects'
 import { GROUND_PRESETS } from '../../lib/forge/ground-textures'
 import { useThumbnailGenerator } from '../../hooks/useThumbnailGenerator'
-import { VRMAvatar } from '../forge/VRMAvatar'
+import { PlayerAvatar } from '../forge/PlayerAvatar'
+import { SettingsContext } from '../scene-lib'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FORGE GROUND — shows when no terrain is loaded (the original conjuring circle)
@@ -106,6 +107,7 @@ export function ForgeRealm() {
   const avatar3dUrl = useOasisStore(s => s.avatar3dUrl)
   const isViewMode = useOasisStore(s => s.isViewMode)
   const customGroundPresets = useOasisStore(s => s.customGroundPresets)
+  const { settings } = useContext(SettingsContext)
 
   // ░▒▓ Background thumbnail gen — renders missing thumbnails offscreen ▓▒░
   useThumbnailGenerator()
@@ -135,10 +137,16 @@ export function ForgeRealm() {
       {/* ░▒▓ WORLD OBJECTS — shared renderer for all placed assets ▓▒░ */}
       <WorldObjectsRenderer />
 
-      {/* ░▒▓ USER AVATAR — VRM avatar from gallery ▓▒░ */}
+      {/* ░▒▓ PLAYER AVATAR — your body in the Oasis ▓▒░ */}
+      {/* orbit: idle at spawn. fps: hidden. third-person: WASD moves, camera follows. */}
       {avatar3dUrl && !isViewMode && avatar3dUrl.endsWith('.vrm') && (
         <Suspense fallback={null}>
-          <VRMAvatar url={avatar3dUrl} position={[0, 0, 3]} />
+          <PlayerAvatar
+            url={avatar3dUrl}
+            controlMode={settings.controlMode}
+            moveSpeed={settings.moveSpeed}
+            mouseSensitivity={settings.mouseSensitivity}
+          />
         </Suspense>
       )}
 

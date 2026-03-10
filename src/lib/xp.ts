@@ -41,6 +41,10 @@ export const DEFAULT_XP_AWARDS = {
   // Meta
   SUBMIT_FEEDBACK: 10,       // Anorak: bug report or feature request
   VIBECODE_REPORT: 100,      // Anorak vibecode: LLM-assisted deep report
+
+  // Onboarding quests — 3x multiplier on first-time actions
+  QUEST_STEP_COMPLETE: 25,   // per quest step completed (bonus on top of normal XP)
+  QUEST_ALL_COMPLETE: 200,   // all 7 quests done — builder is onboarded
 } as const
 
 // Backwards compat — code that imports XP_AWARDS still works
