@@ -866,21 +866,38 @@ export function VRMCatalogRenderer({ path, scale, objectId, displayName }: { pat
     const v = vrmRef.current
     if (!v) return
 
-    // ░▒▓ IBL: apply once environment is ready (HDRI loads async, can't rely on useEffect timing) ▓▒░
+    // ░▒▓ IBL: swap MToon/Basic → Standard so IBL works (MToon is a ShaderMaterial, ignores scene.environment) ▓▒░
     if (!iblAppliedRef.current && state.scene.environment) {
       v.scene.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-          for (const mat of mats) {
-            const m = mat as any
-            if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.9
-            if ('envMapIntensity' in m && m.envMapIntensity < 1) m.envMapIntensity = 1.0
-            // Set envMap explicitly — Three.js uses scene.environment by default for Standard/Physical
-            // but some materials have envMap=null which opts out of that
-            if ('envMap' in m && !m.envMap) { m.envMap = state.scene.environment; mat.needsUpdate = true }
+        if (!(child as THREE.Mesh).isMesh) return
+        const mesh = child as THREE.Mesh
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        const newMats = mats.map(mat => {
+          const m = mat as any
+          if (m.type === 'MToonMaterial' || m.type === 'MeshBasicMaterial' || m.isMToonMaterial) {
+            const std = new THREE.MeshStandardMaterial({
+              map: m.map || m.uniforms?.map?.value || null,
+              normalMap: m.normalMap || m.uniforms?.normalMap?.value || null,
+              emissiveMap: m.emissiveMap || m.uniforms?.emissiveMap?.value || null,
+              emissive: m.emissive || new THREE.Color(0x000000),
+              color: m.color || new THREE.Color(0xffffff),
+              roughness: 0.8,
+              metalness: 0.0,
+              envMap: state.scene.environment,
+              envMapIntensity: 1.2,
+              side: m.side ?? THREE.FrontSide,
+              transparent: m.transparent ?? false,
+              opacity: m.opacity ?? 1,
+              alphaTest: m.alphaTest ?? 0,
+            })
+            std.needsUpdate = true
+            mat.dispose()
+            return std
           }
-        }
+          if ('envMap' in m) { m.envMap = state.scene.environment; m.envMapIntensity = 1.2; m.needsUpdate = true }
+          return mat
+        })
+        mesh.material = Array.isArray(mesh.material) ? newMats : newMats[0]
       })
       iblAppliedRef.current = true
     }

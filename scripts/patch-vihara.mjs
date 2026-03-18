@@ -6,8 +6,11 @@
 import https from 'https'
 
 const WORLD_ID = 'world-1773026698976-vhara'
-const SUPABASE_URL = 'https://sdydklaoulmjppdthqwm.supabase.co'
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkeWRrbGFvdWxtanBwZHRocXdtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjUwMTU1NiwiZXhwIjoyMDg4MDc3NTU2fQ.oB8lBB1hU_HJzkkfnmJjX0pn3BJ-GLexFfjMFhN0oek'
+import { config } from 'dotenv'
+config()
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Missing SUPABASE env vars in .env'); process.exit(1) }
 const PI2 = Math.PI / 2
 
 function request(method, path, body) {

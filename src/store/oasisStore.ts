@@ -871,16 +871,21 @@ export const useOasisStore = create<OasisState>((set, get) => {
             if (!newData) return
             console.log('[Realtime] Remote world update received — applying Merlin/admin patch')
             const defaultLights = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
+            const newCatalog = newData.catalogPlacements || []
+            const newCrafted = newData.craftedScenes || []
+            const newConjured = newData.conjuredAssetIds || []
             set({
               _isReceivingRemoteUpdate: true,
-              placedCatalogAssets: newData.catalogPlacements || [],
-              craftedScenes: newData.craftedScenes || [],
+              placedCatalogAssets: newCatalog,
+              craftedScenes: newCrafted,
               worldLights: newData.lights ?? defaultLights,
               worldSkyBackground: newData.skyBackgroundId || 'night007',
               groundPresetId: newData.groundPresetId || 'none',
               groundTiles: newData.groundTiles || {},
               transforms: newData.transforms || {},
               behaviors: newData.behaviors || {},
+              // Update loaded count so Merlin-placed objects don't trip the nuke protection
+              _loadedObjectCount: newCatalog.length + newCrafted.length + newConjured.length,
             })
             set({ _isReceivingRemoteUpdate: false })
           }
@@ -994,16 +999,20 @@ export const useOasisStore = create<OasisState>((set, get) => {
               if (!newData) return
               console.log('[Realtime] Remote world update — applying after world switch')
               const defaultLights = DEFAULT_WORLD_LIGHTS.map((l, i) => ({ ...l, id: `light-${l.type}-default-${i}`, visible: true } as WorldLight))
+              const newCatalog = newData.catalogPlacements || []
+              const newCrafted = newData.craftedScenes || []
+              const newConjured = newData.conjuredAssetIds || []
               set({
                 _isReceivingRemoteUpdate: true,
-                placedCatalogAssets: newData.catalogPlacements || [],
-                craftedScenes: newData.craftedScenes || [],
+                placedCatalogAssets: newCatalog,
+                craftedScenes: newCrafted,
                 worldLights: newData.lights ?? defaultLights,
                 worldSkyBackground: newData.skyBackgroundId || 'night007',
                 groundPresetId: newData.groundPresetId || 'none',
                 groundTiles: newData.groundTiles || {},
                 transforms: newData.transforms || {},
                 behaviors: newData.behaviors || {},
+                _loadedObjectCount: newCatalog.length + newCrafted.length + newConjured.length,
               })
               set({ _isReceivingRemoteUpdate: false })
             }

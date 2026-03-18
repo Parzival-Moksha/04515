@@ -160,7 +160,7 @@ export function ProfileButton() {
 
   const user = session.user
   const displayName = profile.displayName || user.name || 'Wanderer'
-  const avatarSrc = profile.avatar_url || user.image
+  const avatarSrc = profile.avatar_url || null
   const initial = (displayName[0] || '?').toUpperCase()
 
   const startEditing = () => {
@@ -451,12 +451,12 @@ export function ProfileButton() {
           onSelect={async (avatarUrl) => {
             setAvatar3dUrl(avatarUrl)
             setShowAvatarGallery(false)
-            // Save to profile
+            // Save to profile (null = remove avatar)
             try {
               await fetch('/api/profile/avatar3d', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: avatarUrl, urlType: 'localPath' }),
+                body: JSON.stringify({ url: avatarUrl, urlType: avatarUrl ? 'localPath' : 'remove' }),
               })
               fetchProfile()
             } catch (err) {

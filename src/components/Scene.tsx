@@ -42,6 +42,8 @@ import { ActionLogButton, ActionLogPanel } from './forge/ActionLog'
 import { ProfileButton } from './forge/ProfileButton'
 import { OnboardingModal } from './forge/OnboardingModal'
 import { ChatPanel } from './forge/ChatPanel'
+import { MerlinPanel } from './forge/MerlinPanel'
+import { ArielPanel } from './forge/ArielPanel'
 import { FeedbackPanel } from './forge/FeedbackPanel'
 import { HelpPanel } from './forge/HelpPanel'
 import { useWorldLoader } from './forge/WorldObjects'
@@ -721,6 +723,7 @@ function useQuestTracker() {
 export default function Scene() {
   const { data: session } = useSession()
   const isAnonymous = !session
+  const isAdmin = session?.user?.id === (process.env.NEXT_PUBLIC_ADMIN_USER_ID || '')
   const [isDragging, setIsDragging] = useState(false)
 
   // ─═̷─═̷─⚔️─═̷─═̷─{ QUEST TRACKER — auto-detect onboarding actions }─═̷─═̷─⚔️─═̷─═̷─
@@ -769,8 +772,10 @@ export default function Scene() {
   // Asset Explorer removed — merged into WizardConsole
   const [actionLogOpen, setActionLogOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [merlinOpen, setMerlinOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [arielOpen, setArielOpen] = useState(false)
 
   const orbitControlsRef = useRef<any>(null)
 
@@ -969,6 +974,36 @@ export default function Scene() {
             💬
           </button>
         )}
+        {!hideEditTools && (
+          <button
+            onClick={() => setMerlinOpen(prev => !prev)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+            style={{
+              background: merlinOpen ? 'rgba(168,85,247,0.3)' : 'rgba(0,0,0,0.6)',
+              border: `1px solid ${merlinOpen ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.15)'}`,
+              color: merlinOpen ? '#A855F7' : '#aaa',
+              boxShadow: merlinOpen ? '0 0 12px rgba(168,85,247,0.3)' : 'none',
+            }}
+            title="Merlin — AI World Builder"
+          >
+            🧙
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            onClick={() => setArielOpen(prev => !prev)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110"
+            style={{
+              background: arielOpen ? 'rgba(56,189,248,0.3)' : 'rgba(0,0,0,0.6)',
+              border: `1px solid ${arielOpen ? 'rgba(56,189,248,0.6)' : 'rgba(255,255,255,0.15)'}`,
+              color: arielOpen ? '#38BDF8' : '#aaa',
+              boxShadow: arielOpen ? '0 0 12px rgba(56,189,248,0.3)' : 'none',
+            }}
+            title="Ariel — Claude Code Agent"
+          >
+            🌊
+          </button>
+        )}
         {!isAnonymous && (
           <button
             onClick={() => setFeedbackOpen(prev => !prev)}
@@ -1026,6 +1061,22 @@ export default function Scene() {
         <ChatPanel
           isOpen={chatOpen}
           onClose={() => setChatOpen(false)}
+        />
+      )}
+
+      {/* 🧙 Merlin — AI World Builder — hidden in view mode */}
+      {!hideEditTools && (
+        <MerlinPanel
+          isOpen={merlinOpen}
+          onClose={() => setMerlinOpen(false)}
+        />
+      )}
+
+      {/* 🌊 Ariel — Claude Code Agent — admin only */}
+      {isAdmin && (
+        <ArielPanel
+          isOpen={arielOpen}
+          onClose={() => setArielOpen(false)}
         />
       )}
 

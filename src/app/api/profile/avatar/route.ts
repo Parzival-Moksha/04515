@@ -53,8 +53,18 @@ export async function POST(request: Request) {
       }
     }
 
-    // Write file to disk
+    // Validate magic bytes (don't trust declared MIME type alone)
     const buffer = Buffer.from(await file.arrayBuffer())
+    const magicValid =
+      (ext === 'jpg' && buffer[0] === 0xFF && buffer[1] === 0xD8) ||
+      (ext === 'png' && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) ||
+      (ext === 'webp' && buffer.subarray(8, 12).toString() === 'WEBP') ||
+      (ext === 'gif' && buffer.subarray(0, 3).toString() === 'GIF')
+    if (!magicValid) {
+      return NextResponse.json({ error: 'File content does not match declared type' }, { status: 400 })
+    }
+
+    // Write file to disk
     await fs.writeFile(path.join(avatarDir, filename), buffer)
 
     // Update DB

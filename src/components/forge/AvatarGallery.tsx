@@ -73,7 +73,7 @@ function VRMPreview({ url }: { url: string }) {
 
 interface AvatarGalleryProps {
   currentAvatarUrl: string | null
-  onSelect: (avatarUrl: string) => void
+  onSelect: (avatarUrl: string | null) => void
   onClose: () => void
 }
 
@@ -155,6 +155,38 @@ export function AvatarGallery({ currentAvatarUrl, onSelect, onClose }: AvatarGal
             gap: 8,
             alignContent: 'start',
           }}>
+            {/* Remove avatar option */}
+            <button
+              onClick={() => onSelect(null)}
+              style={{
+                background: !currentAvatarUrl ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${!currentAvatarUrl ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: 8,
+                padding: '12px 8px',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.15s',
+              }}
+            >
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: 'rgba(239,68,68,0.1)',
+                border: '2px solid rgba(239,68,68,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+              }}>
+                🚫
+              </div>
+              <span style={{
+                fontSize: 9, color: !currentAvatarUrl ? '#EF4444' : '#999',
+                textAlign: 'center', lineHeight: 1.2,
+              }}>
+                No Avatar
+              </span>
+            </button>
             {AVATAR_GALLERY.map(avatar => {
               const isSelected = currentFile === avatar.file
               const isPreviewing = previewAvatar?.id === avatar.id

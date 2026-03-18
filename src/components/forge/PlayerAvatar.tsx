@@ -200,19 +200,40 @@ export function PlayerAvatar({
 
     const delta = Math.min(rawDelta, MAX_DELTA)
 
-    // ── IBL one-shot ─────────────────────────────────────────────
+    // ── IBL one-shot — swap MToon/Basic → Standard so IBL works ──
     if (!iblAppliedRef.current && state.scene.environment) {
       v.scene.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mats = Array.isArray((child as THREE.Mesh).material)
-            ? (child as THREE.Mesh).material as THREE.Material[]
-            : [(child as THREE.Mesh).material]
-          for (const mat of mats) {
-            const m = mat as any
-            if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.9
-            if ('envMap' in m && !m.envMap) { m.envMap = state.scene.environment; m.needsUpdate = true }
+        if (!(child as THREE.Mesh).isMesh) return
+        const mesh = child as THREE.Mesh
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        const newMats = mats.map(mat => {
+          const m = mat as any
+          // MToonMaterial or MeshBasicMaterial can't handle IBL — swap to Standard
+          if (m.type === 'MToonMaterial' || m.type === 'MeshBasicMaterial' || m.isMToonMaterial) {
+            const std = new THREE.MeshStandardMaterial({
+              map: m.map || m.uniforms?.map?.value || null,
+              normalMap: m.normalMap || m.uniforms?.normalMap?.value || null,
+              emissiveMap: m.emissiveMap || m.uniforms?.emissiveMap?.value || null,
+              emissive: m.emissive || new THREE.Color(0x000000),
+              color: m.color || new THREE.Color(0xffffff),
+              roughness: 0.8,
+              metalness: 0.0,
+              envMap: state.scene.environment,
+              envMapIntensity: 1.2,
+              side: m.side ?? THREE.FrontSide,
+              transparent: m.transparent ?? false,
+              opacity: m.opacity ?? 1,
+              alphaTest: m.alphaTest ?? 0,
+            })
+            std.needsUpdate = true
+            mat.dispose()
+            return std
           }
-        }
+          // Standard/Physical — just set envMap
+          if ('envMap' in m) { m.envMap = state.scene.environment; m.envMapIntensity = 1.2; m.needsUpdate = true }
+          return mat
+        })
+        mesh.material = Array.isArray(mesh.material) ? newMats : newMats[0]
       })
       iblAppliedRef.current = true
     }
@@ -239,7 +260,7 @@ export function PlayerAvatar({
       // Camera forward direction (projected to XZ plane)
       const az = cameraAzimuth.current
       const camForward = new THREE.Vector3(-Math.sin(az), 0, -Math.cos(az))
-      const camRight = new THREE.Vector3(camForward.z, 0, -camForward.x) // perpendicular right
+      const camRight = new THREE.Vector3(-camForward.z, 0, camForward.x) // perpendicular right
 
       // Movement direction relative to camera
       const moveDir = new THREE.Vector3()
@@ -305,8 +326,6 @@ export function PlayerAvatar({
     }
   })
 
-  // ── FPS mode: you ARE the camera, no body to render ────────────
-  if (controlMode === 'fps') return null
   if (!vrm) return null
 
   return (

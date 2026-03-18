@@ -10,8 +10,11 @@ const now = new Date().toISOString()
 const ts = Date.now()
 const worldId = `world-${ts}-vhara`
 const userId = '116841151327289989984'
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkeWRrbGFvdWxtanBwZHRocXdtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjUwMTU1NiwiZXhwIjoyMDg4MDc3NTU2fQ.oB8lBB1hU_HJzkkfnmJjX0pn3BJ-GLexFfjMFhN0oek'
-const SUPABASE_URL = 'https://sdydklaoulmjppdthqwm.supabase.co'
+import { config } from 'dotenv'
+config()
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Missing SUPABASE env vars in .env'); process.exit(1) }
 
 // ─── helper: unique incrementing ID for placements
 let _seq = ts

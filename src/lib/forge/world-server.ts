@@ -303,12 +303,27 @@ export async function loadPublicWorld(id: string): Promise<{ state: WorldState; 
 
   if (error || !data?.data) return null
 
+  // Fetch fresh profile data — never show stale cached creator_name/avatar
+  let creatorName = (data.creator_name as string) || undefined
+  let creatorAvatar = (data.creator_avatar as string) || undefined
+  if (data.user_id) {
+    const { data: profile } = await sb()
+      .from('profiles')
+      .select('display_name, name, avatar_url')
+      .eq('id', data.user_id)
+      .single()
+    if (profile) {
+      creatorName = profile.display_name || profile.name || creatorName
+      creatorAvatar = profile.avatar_url ?? creatorAvatar
+    }
+  }
+
   return {
     state: data.data as WorldState,
     meta: {
       ...toWorldMeta(data),
-      creator_name: (data.creator_name as string) || undefined,
-      creator_avatar: (data.creator_avatar as string) || undefined,
+      creator_name: creatorName,
+      creator_avatar: creatorAvatar,
     },
   }
 }

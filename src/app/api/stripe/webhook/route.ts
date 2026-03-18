@@ -42,26 +42,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid metadata' }, { status: 400 })
     }
 
-    // Credit the user — atomic increment via RPC or read-then-write
+    // Credit the user — atomic increment via Supabase RPC
+    // Avoids read-then-write race condition when two webhooks fire simultaneously
     const sb = getServerSupabase()
-    const { data: profile } = await sb
-      .from('profiles')
-      .select('credits')
-      .eq('id', userId)
-      .single()
+    const { data: updated, error: updateError } = await sb.rpc('increment_credits', {
+      user_id: userId,
+      amount: credits,
+    })
 
-    const currentCredits = profile?.credits ?? 0
-    const { error: updateError } = await sb
-      .from('profiles')
-      .update({ credits: currentCredits + credits, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-
-    if (updateError) {
+    // Fallback: if RPC doesn't exist yet, use read-then-write (safe enough at our scale)
+    if (updateError?.message?.includes('function') || updateError?.code === '42883') {
+      console.warn('[Stripe] increment_credits RPC not found, falling back to read-then-write')
+      const { data: profile } = await sb
+        .from('profiles')
+        .select('credits')
+        .eq('id', userId)
+        .single()
+      const currentCredits = profile?.credits ?? 0
+      const { error: fallbackError } = await sb
+        .from('profiles')
+        .update({ credits: currentCredits + credits, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+      if (fallbackError) {
+        console.error('[Stripe] Credit update failed:', fallbackError.message)
+        return NextResponse.json({ error: 'Credit update failed' }, { status: 500 })
+      }
+      console.log(`[Stripe] ✓ Credited ${credits} to user ${userId} (fallback: ${currentCredits} → ${currentCredits + credits})`)
+    } else if (updateError) {
       console.error('[Stripe] Credit update failed:', updateError.message)
       return NextResponse.json({ error: 'Credit update failed' }, { status: 500 })
+    } else {
+      console.log(`[Stripe] ✓ Atomically credited ${credits} to user ${userId}`)
     }
-
-    console.log(`[Stripe] ✓ Credited ${credits} to user ${userId} (${currentCredits} → ${currentCredits + credits})`)
   }
 
   return NextResponse.json({ received: true })

@@ -22,6 +22,16 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { url, urlType } = body
 
+    // Remove avatar — set to null
+    if (urlType === 'remove') {
+      await getServerSupabase()
+        .from('profiles')
+        .update({ avatar_3d_url: null, updated_at: new Date().toISOString() })
+        .eq('id', session.user.id)
+      console.log(`[Avatar3D] Removed avatar for user ${session.user.id}`)
+      return NextResponse.json({ avatar_3d_url: null })
+    }
+
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: 'Missing avatar URL' }, { status: 400 })
     }

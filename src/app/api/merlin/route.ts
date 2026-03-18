@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { getServerSupabase } from '@/lib/supabase'
-import { loadWorld, saveWorld } from '@/lib/forge/world-server'
+import { saveWorld } from '@/lib/forge/world-server'
 import type { WorldState } from '@/lib/forge/world-persistence'
 import type { CatalogPlacement, CraftedScene, WorldLight } from '@/lib/conjure/types'
 import { ASSET_CATALOG } from '@/components/scene-lib/constants'
@@ -520,6 +520,10 @@ export async function POST(request: NextRequest) {
     try {
       const messages: Array<{ role: string; content: string | unknown[] }> = [
         {
+          role: 'system',
+          content: SYSTEM_PROMPT,
+        },
+        {
           role: 'user',
           content: `Current world state:\n${worldSummary()}\n\nUser request: ${prompt}`,
         },
@@ -585,20 +589,18 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        // Add assistant message to conversation history
-        messages.push({ role: 'assistant', content: msg.tool_calls ? [] : (msg.content || '') })
-        // OpenAI-compat: assistant message with tool_calls
-        const lastMsg = messages[messages.length - 1]
-        if (msg.tool_calls) {
-          lastMsg.content = msg.tool_calls.map(tc => ({
-            type: 'tool_use',
+        // ─═̷─═̷─ OpenAI-compat format ─═̷─═̷─
+        // Assistant message: { role: 'assistant', content, tool_calls }
+        // Tool results: { role: 'tool', tool_call_id, content } — one per call
+        messages.push({
+          role: 'assistant',
+          content: msg.content || '',
+          tool_calls: msg.tool_calls.map(tc => ({
             id: tc.id,
-            name: tc.function.name,
-            input: JSON.parse(tc.function.arguments || '{}'),
-          }))
-        }
-
-        const toolResults: Array<{ type: string; tool_use_id: string; content: string }> = []
+            type: 'function' as const,
+            function: { name: tc.function.name, arguments: tc.function.arguments },
+          })),
+        } as never) // cast — our message type is simplified, OpenRouter accepts this
 
         for (const toolCall of msg.tool_calls) {
           const toolName = toolCall.function.name
@@ -619,15 +621,13 @@ export async function POST(request: NextRequest) {
             await persist()
           }
 
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolCall.id,
+          // OpenAI format: each tool result is its own message with role: 'tool'
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
             content: result.message,
-          })
+          } as never)
         }
-
-        // Add tool results to conversation for next iteration
-        messages.push({ role: 'user', content: toolResults })
       }
 
       if (iteration >= MAX_ITERATIONS) {

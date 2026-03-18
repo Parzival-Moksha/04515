@@ -8,7 +8,6 @@
 import { signIn, useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense, useEffect } from 'react'
-import Image from 'next/image'
 
 function LoginContent() {
   const searchParams = useSearchParams()
@@ -17,9 +16,6 @@ function LoginContent() {
   const { status } = useSession()
   const router = useRouter()
 
-  // Client-side redirect if already authenticated
-  // (Belt-and-suspenders with middleware — middleware should catch this,
-  //  but NextAuth v5 beta has edge cases with static pages)
   useEffect(() => {
     if (status === 'authenticated') router.replace('/')
   }, [status, router])
@@ -28,22 +24,53 @@ function LoginContent() {
 
   return (
     <main className="w-full h-screen bg-black flex items-center justify-center">
+      {/* Neon glow keyframes */}
+      <style>{`
+        @keyframes neonPulse {
+          0%, 100% { text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88, 0 0 40px #00ff8855, 0 0 80px #00ff8822; }
+          50% { text-shadow: 0 0 5px #00ff88, 0 0 15px #00ff88, 0 0 30px #00ff8844, 0 0 60px #00ff8811; }
+        }
+        @keyframes logoFadeIn {
+          0% { opacity: 0; transform: scale(0.9); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+
       <div className="flex flex-col items-center gap-8 max-w-sm w-full px-6">
-        {/* Logo */}
-        <div className="flex flex-col items-center gap-4">
-          <Image
-            src="/favicon.svg"
-            alt="Oasis"
-            width={80}
-            height={80}
-            className="opacity-90"
+        {/* Logo with faded edges */}
+        <div className="flex flex-col items-center gap-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/oasislogo.jpg"
+            alt=""
+            width={140}
+            height={140}
+            className="rounded-2xl"
+            style={{
+              filter: 'brightness(1.3)',
+              boxShadow: '0 0 30px rgba(0,255,136,0.2), 0 0 60px rgba(0,255,136,0.08)',
+              animation: 'logoFadeIn 1.2s ease-out',
+            }}
           />
-          <h1 className="text-3xl font-bold tracking-wider text-white"
-            style={{ fontFamily: "'Courier New', monospace", textShadow: '0 0 20px rgba(168, 85, 247, 0.5)' }}>
-            THE OASIS
+          <h1
+            className="text-4xl font-black tracking-[0.3em] text-[#00ff88]"
+            style={{
+              fontFamily: "'Courier New', 'Lucida Console', monospace",
+              animation: 'neonPulse 3s ease-in-out infinite',
+              letterSpacing: '0.3em',
+            }}
+          >
+            04515
           </h1>
-          <p className="text-gray-500 text-sm text-center">
-            Text-to-3D world builder
+          <p
+            className="text-sm text-center leading-relaxed tracking-wider"
+            style={{
+              fontFamily: "'Courier New', 'Lucida Console', monospace",
+              color: '#88ddaa',
+              textShadow: '0 0 12px rgba(0,255,136,0.25)',
+            }}
+          >
+            open source, community co-vibecoded metaverse
           </p>
         </div>
 
@@ -57,8 +84,26 @@ function LoginContent() {
           </div>
         )}
 
-        {/* Sign in buttons */}
+        {/* Actions */}
         <div className="w-full flex flex-col gap-3">
+          {/* Explore — the hero action for visitors */}
+          <button
+            onClick={() => router.push('/explore')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded border border-[#00ff88]/30 bg-[#00ff88]/10 hover:bg-[#00ff88]/20 hover:border-[#00ff88]/50 transition-all text-[#00ff88] text-sm font-bold cursor-pointer tracking-wide"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+            </svg>
+            Explore Worlds
+          </button>
+
+          <div className="flex items-center gap-3 my-1">
+            <div className="flex-1 border-t border-gray-800" />
+            <span className="text-[10px] text-gray-600 uppercase tracking-widest">sign in to build</span>
+            <div className="flex-1 border-t border-gray-800" />
+          </div>
+
           <button
             onClick={() => signIn('google', { callbackUrl })}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded border border-gray-700 bg-gray-900 hover:bg-gray-800 hover:border-gray-500 transition-all text-white text-sm cursor-pointer"
@@ -107,7 +152,7 @@ function LoginContent() {
         </div>
 
         {/* Footer */}
-        <p className="text-gray-700 text-xs text-center">
+        <p className="text-gray-700 text-xs text-center" style={{ fontFamily: "'Courier New', monospace" }}>
           04515.xyz
         </p>
       </div>

@@ -210,14 +210,23 @@ export default function AdminPage() {
   const [xpSaving, setXpSaving] = useState(false)
   const [xpMessage, setXpMessage] = useState('')
 
+  // Default worlds
+  const [dwAnon, setDwAnon] = useState('')
+  const [dwNewUser, setDwNewUser] = useState('')
+  const [dwSavedAnon, setDwSavedAnon] = useState('')
+  const [dwSavedNewUser, setDwSavedNewUser] = useState('')
+  const [dwSaving, setDwSaving] = useState(false)
+  const [dwMessage, setDwMessage] = useState('')
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
     if (status === 'authenticated') {
       Promise.all([
         fetch('/api/admin/pricing').then(r => r.ok ? r.json() : Promise.reject('Forbidden')),
         fetch('/api/admin/xp').then(r => r.ok ? r.json() : Promise.reject('Forbidden')),
+        fetch('/api/admin/default-worlds').then(r => r.ok ? r.json() : Promise.reject('Forbidden')),
       ])
-        .then(([priceData, xpData]) => {
+        .then(([priceData, xpData, dwData]) => {
           setPricing(priceData.pricing)
           setDefaults(priceData.defaults)
           const edits: Record<string, string> = {}
@@ -233,6 +242,12 @@ export default function AdminPage() {
             xpEdits[key] = String(xpData.xpAwards[key])
           }
           setXpEditing(xpEdits)
+
+          const dw = dwData.defaultWorlds || {}
+          setDwAnon(dw.anon || '')
+          setDwNewUser(dw.new_user || '')
+          setDwSavedAnon(dw.anon || '')
+          setDwSavedNewUser(dw.new_user || '')
           setLoading(false)
         })
         .catch(() => {
@@ -302,6 +317,35 @@ export default function AdminPage() {
       setXpMessage('Failed to save')
     }
     setXpSaving(false)
+  }
+
+  const handleDwSave = async () => {
+    setDwSaving(true)
+    setDwMessage('')
+    const trimAnon = dwAnon.trim()
+    const trimNewUser = dwNewUser.trim()
+    if (trimAnon === dwSavedAnon && trimNewUser === dwSavedNewUser) {
+      setDwMessage('No changes to save')
+      setDwSaving(false)
+      return
+    }
+    const res = await fetch('/api/admin/default-worlds', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anon: trimAnon || null, new_user: trimNewUser || null }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const dw = data.defaultWorlds
+      setDwAnon(dw.anon || '')
+      setDwNewUser(dw.new_user || '')
+      setDwSavedAnon(dw.anon || '')
+      setDwSavedNewUser(dw.new_user || '')
+      setDwMessage('Default worlds updated — takes effect in ~5 min (server cache)')
+    } else {
+      setDwMessage('Failed to save')
+    }
+    setDwSaving(false)
   }
 
   // ─── RENDER ────────────────────────────────────────────────────────────
@@ -421,6 +465,79 @@ export default function AdminPage() {
                 step="1"
                 accentColor="purple"
               />
+            </Section>
+
+            {/* ═══════ DEFAULT WORLDS ═══════ */}
+            <Section
+              title="Default Worlds"
+              subtitle="routing for new / anonymous users"
+              accentColor="orange"
+              actions={
+                <>
+                  <button
+                    onClick={handleDwSave}
+                    disabled={dwSaving}
+                    className="px-4 py-1.5 rounded text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 disabled:opacity-50 transition-all"
+                  >
+                    {dwSaving ? 'Saving...' : 'Save Default Worlds'}
+                  </button>
+                  {dwMessage && (
+                    <span className={`text-[10px] ${dwMessage.includes('updated') ? 'text-green-400' : 'text-amber-400'}`}>
+                      {dwMessage}
+                    </span>
+                  )}
+                </>
+              }
+            >
+              <div className="px-4 py-1.5 bg-gray-900/30 border-b border-gray-800/50">
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest">Anonymous Visitors</span>
+              </div>
+              <div className="px-4 py-3 border-b border-gray-800/30">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 flex-1">Default world (logged-out users)</span>
+                  <input
+                    type="text"
+                    placeholder="world-xxxx... or empty"
+                    value={dwAnon}
+                    onChange={e => setDwAnon(e.target.value)}
+                    className={`w-64 text-xs bg-black/60 border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-600 font-mono ${
+                      dwAnon !== dwSavedAnon ? 'border-orange-500/50 text-orange-300' : 'border-gray-700/30 text-gray-300'
+                    }`}
+                  />
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1.5">
+                  If set, anonymous visitors see this world in view mode instead of /explore.
+                  Leave empty to redirect to /explore.
+                </p>
+              </div>
+
+              <div className="px-4 py-1.5 bg-gray-900/30 border-b border-gray-800/50">
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest">New Users</span>
+              </div>
+              <div className="px-4 py-3 border-b border-gray-800/30">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 flex-1">First-login showcase world</span>
+                  <input
+                    type="text"
+                    placeholder="world-xxxx... or empty"
+                    value={dwNewUser}
+                    onChange={e => setDwNewUser(e.target.value)}
+                    className={`w-64 text-xs bg-black/60 border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-600 font-mono ${
+                      dwNewUser !== dwSavedNewUser ? 'border-orange-500/50 text-orange-300' : 'border-gray-700/30 text-gray-300'
+                    }`}
+                  />
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1.5">
+                  Shown in view mode on first login. User can fork or dismiss.
+                  Leave empty to skip showcase and drop them in their own world.
+                </p>
+              </div>
+
+              <div className="px-4 py-2 border-b border-gray-800/30">
+                <p className="text-[10px] text-gray-600">
+                  Tip: Copy a world ID from the Explore page or RealmSelector. Format: <code className="text-gray-500">world-XXXXXXXXX-XXXX</code>
+                </p>
+              </div>
             </Section>
 
             {/* ═══════ FOOTER ═══════ */}
